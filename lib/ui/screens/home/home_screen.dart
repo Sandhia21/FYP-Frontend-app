@@ -91,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         title: 'VirtuLearn',
         showBackButton: false,
         showSearch: true,
+        hideProfileIcon: true,
         onSearchChanged: _handleSearch,
       ),
       body: SafeArea(

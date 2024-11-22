@@ -3,6 +3,7 @@ import '../data/models/user.dart';
 import '../data/models/profile.dart';
 import '../data/repositories/auth_repository.dart';
 import '../services/api_config.dart';
+import '../data/models/course.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthRepository _repository;
@@ -19,6 +20,17 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _user != null;
 
+  List<Course> get enrolledCourses =>
+      _profile?.enrolledCourses
+          .map((course) => Course.fromJson(course))
+          .toList() ??
+      [];
+  List<Course> get createdCourses =>
+      _profile?.createdCourses
+          .map((course) => Course.fromJson(course))
+          .toList() ??
+      [];
+
   Future<void> login(String username, String password) async {
     try {
       _isLoading = true;
@@ -26,9 +38,9 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       _user = await _repository.login(username, password);
-      // Store token in ApiConfig
       if (_user?.token != null) {
         await ApiConfig.setAuthToken(_user!.token!);
+        await fetchProfile();
       }
       notifyListeners();
     } catch (e) {
@@ -43,15 +55,24 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
       await _repository.logout();
-      // Clear token from ApiConfig
-      await ApiConfig.removeAuthToken();
+
+      // Clear local state
       _user = null;
+      _profile = null;
+
       notifyListeners();
     } catch (e) {
       _error = e.toString();
       notifyListeners();
       throw e;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -87,7 +108,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // Add register method
   Future<void> register({
     required String username,
     required String email,
@@ -110,7 +130,6 @@ class AuthProvider extends ChangeNotifier {
         lastName: lastName,
       );
 
-      // Automatically login after successful registration
       await login(username, password);
     } catch (e) {
       _error = e.toString();
@@ -184,5 +203,17 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  bool get isTeacher => _profile?.role == 'teacher';
+  bool get isStudent => _profile?.role == 'student';
+
+  List<Course> get userCourses {
+    if (isTeacher) {
+      return createdCourses;
+    } else if (isStudent) {
+      return enrolledCourses;
+    }
+    return [];
   }
 }

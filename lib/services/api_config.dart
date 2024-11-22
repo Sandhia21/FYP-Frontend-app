@@ -65,6 +65,10 @@ class ApiConfig {
   static Future<void> removeAuthToken() async {
     try {
       await _secureStorage.delete(key: _tokenKey);
+      // Also clear the refresh token
+      await _secureStorage.delete(key: 'refresh_token');
+      // Clear the Authorization header
+      clearHeaders();
     } catch (e) {
       print('Error removing token: $e');
       rethrow;
@@ -88,5 +92,9 @@ class ApiConfig {
       print('Error getting token: $e');
       return null;
     }
+  }
+
+  static void clearHeaders() {
+    _dio.options.headers.remove('Authorization');
   }
 }

@@ -69,13 +69,13 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const SizedBox(height: 40),
             // Back Button
-            Padding(
-              padding: const EdgeInsets.all(Dimensions.md),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
+            // Padding(
+            //   padding: const EdgeInsets.all(Dimensions.md),
+            //   child: IconButton(
+            //     icon: const Icon(Icons.arrow_back, color: AppColors.white),
+            //     onPressed: () => Navigator.pop(context),
+            //   ),
+            // ),
             Padding(
               padding: const EdgeInsets.all(Dimensions.lg),
               child: Column(

@@ -45,6 +45,7 @@ class AuthRepository {
     try {
       await _authService.logout();
       await ApiConfig.removeAuthToken();
+      ApiConfig.clearHeaders();
     } catch (e) {
       throw _handleRepositoryError(e);
     }

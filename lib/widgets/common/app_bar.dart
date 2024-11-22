@@ -9,6 +9,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final Function(String)? onSearchChanged;
   final bool showSearch;
+  final bool hideProfileIcon;
+  final bool centerTitle;
 
   const CustomAppBar({
     Key? key,
@@ -17,6 +19,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.onSearchChanged,
     this.showSearch = false,
+    this.hideProfileIcon = false,
+    this.centerTitle = false,
   }) : super(key: key);
 
   bool get _isHome => !showBackButton;
@@ -88,9 +92,11 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                       left: showBackButton ? 0 : 16,
                     ),
                     child: Column(
-                      crossAxisAlignment: showBackButton
+                      crossAxisAlignment: centerTitle
                           ? CrossAxisAlignment.center
-                          : CrossAxisAlignment.start,
+                          : showBackButton
+                              ? CrossAxisAlignment.center
+                              : CrossAxisAlignment.start,
                       children: [
                         if (_isHome && user != null)
                           Text(
@@ -122,14 +128,15 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                             '/notifications',
                           ),
                         ),
-                      IconButton(
-                        icon: const Icon(Icons.person_outline),
-                        color: AppColors.white,
-                        onPressed: () => Navigator.pushNamed(
-                          context,
-                          '/profile',
+                      if (!hideProfileIcon)
+                        IconButton(
+                          icon: const Icon(Icons.person_outline),
+                          color: AppColors.white,
+                          onPressed: () => Navigator.pushNamed(
+                            context,
+                            '/profile',
+                          ),
                         ),
-                      ),
                     ]),
               ],
             ),

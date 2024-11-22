@@ -73,10 +73,10 @@ class AuthApiService {
 
   Future<void> logout() async {
     try {
-      await _dio.post('/auth/logout/');
       // Clear stored tokens
-      await _storage.delete(key: 'auth_token');
-      await _storage.delete(key: 'refresh_token');
+      await _storage.deleteAll();
+      // Clear Dio headers
+      _dio.options.headers.remove('Authorization');
     } on DioException catch (e) {
       throw _handleError(e);
     }
