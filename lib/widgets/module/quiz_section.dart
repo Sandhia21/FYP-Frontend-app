@@ -116,106 +116,115 @@ class _QuizSectionState extends State<QuizSection> {
                     IconButton(
                       icon: const Icon(Icons.add),
                       onPressed: _handleAddQuiz,
-                      tooltip: 'Create Quiz',
+                      color: AppColors.primary,
                     ),
                 ],
               ),
               const SizedBox(height: Dimensions.md),
               Expanded(
                 child: quizProvider.quizzes.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.quiz_outlined,
-                              size: 48,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(height: Dimensions.md),
-                            if (widget.isTeacher)
-                              CustomButton(
-                                text: 'Create First Quiz',
-                                onPressed: _handleAddQuiz,
-                                isOutlined: true,
-                              )
-                            else
-                              const Text(
-                                'Quizzes will appear here once your instructor creates them',
-                                style: TextStyles.bodyMedium,
-                                textAlign: TextAlign.center,
-                              ),
-                          ],
+                    ? const Center(
+                        child: Text(
+                          'No quizzes available',
+                          style: TextStyles.bodyLarge,
                         ),
                       )
                     : ListView.builder(
                         itemCount: quizProvider.quizzes.length,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: Dimensions.sm,
+                          horizontal: Dimensions.xs,
+                        ),
                         itemBuilder: (context, index) {
                           final quiz = quizProvider
                               .quizzes[quizProvider.quizzes.length - 1 - index];
-                          return Card(
-                            margin:
-                                const EdgeInsets.only(bottom: Dimensions.sm),
-                            child: ListTile(
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                widget.isTeacher
-                                    ? AppRoutes.quizDetail
-                                    : AppRoutes.takeQuiz,
-                                arguments: {
-                                  'moduleId': widget.moduleId,
-                                  'quizId': quiz.id,
-                                  'isTeacher': widget.isTeacher,
-                                },
+                          return Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: Dimensions.md),
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(Dimensions.sm),
+                                side: BorderSide(
+                                  color: AppColors.grey.withOpacity(0.2),
+                                ),
                               ),
-                              title:
-                                  Text(quiz.title, style: TextStyles.bodyLarge),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Duration: ${quiz.quizDuration} minutes',
-                                    style: TextStyles.bodyMedium.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                              child: ListTile(
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  widget.isTeacher
+                                      ? AppRoutes.quizDetail
+                                      : AppRoutes.takeQuiz,
+                                  arguments: {
+                                    'moduleId': widget.moduleId,
+                                    'quizId': quiz.id,
+                                    'isTeacher': widget.isTeacher,
+                                  },
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: Dimensions.md,
+                                  vertical: Dimensions.sm,
+                                ),
+                                title: Text(
+                                  quiz.title,
+                                  style: TextStyles.bodyLarge.copyWith(
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  Text(
-                                    quiz.description,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyles.bodyMedium.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                subtitle: Text(
+                                  'Duration: ${quiz.quizDuration} minutes',
+                                  style: TextStyles.bodyMedium.copyWith(
+                                    color: AppColors.textSecondary,
                                   ),
-                                ],
+                                ),
+                                leading: Container(
+                                  padding: const EdgeInsets.all(Dimensions.sm),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(Dimensions.sm),
+                                  ),
+                                  child: const Icon(
+                                    Icons.quiz_outlined,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                trailing: widget.isTeacher
+                                    ? PopupMenuButton(
+                                        icon: const Icon(
+                                          Icons.more_vert,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                        itemBuilder: (context) => [
+                                          const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Text('Edit'),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text('Delete'),
+                                          ),
+                                        ],
+                                        onSelected: (value) {
+                                          switch (value) {
+                                            case 'edit':
+                                              _handleAddQuiz();
+                                              break;
+                                            case 'delete':
+                                              _handleDeleteQuiz(quiz);
+                                              break;
+                                          }
+                                        },
+                                      )
+                                    : const Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 16,
+                                        color: AppColors.textSecondary,
+                                      ),
                               ),
-                              trailing: widget.isTeacher
-                                  ? PopupMenuButton(
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text('Edit'),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete'),
-                                        ),
-                                      ],
-                                      onSelected: (value) {
-                                        switch (value) {
-                                          case 'edit':
-                                            _handleAddQuiz();
-                                            break;
-                                          case 'delete':
-                                            _handleDeleteQuiz(quiz);
-                                            break;
-                                        }
-                                      },
-                                    )
-                                  : const Icon(
-                                      Icons.chevron_right,
-                                      color: AppColors.textSecondary,
-                                    ),
                             ),
                           );
                         },

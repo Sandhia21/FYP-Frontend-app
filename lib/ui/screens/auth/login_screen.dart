@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordController.text,
         );
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          Navigator.pushReplacementNamed(context, '/main');
         }
       } catch (e) {
         if (mounted) {

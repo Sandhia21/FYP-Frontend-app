@@ -8,23 +8,28 @@ class ResultProvider extends ChangeNotifier {
   Map<String, dynamic>? _leaderboard;
   bool _isLoading = false;
   String? _error;
+  Result? _currentResult;
 
   ResultProvider(this._repository);
 
-  List<Result> get results => _results;
+  List<Result> get results => List<Result>.from(_results);
   Map<String, dynamic>? get leaderboard => _leaderboard;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  Result? get currentResult => _currentResult;
 
   Future<void> fetchResults(int moduleId, int quizId) async {
     try {
       _setLoading(true);
-      _results = await _repository.getResults(moduleId, quizId);
+      final fetchedResults = await _repository.getResults(moduleId, quizId);
+      _results = fetchedResults.where((result) => result != null).toList();
       _error = null;
     } catch (e) {
       _error = e.toString();
+      _results = [];
     } finally {
       _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -33,6 +38,7 @@ class ResultProvider extends ChangeNotifier {
     required int quizId,
     required double percentage,
     required String quizContent,
+    String? aiRecommendations,
   }) async {
     try {
       _setLoading(true);
@@ -41,6 +47,7 @@ class ResultProvider extends ChangeNotifier {
         quizId: quizId,
         percentage: percentage,
         quizContent: quizContent,
+        aiRecommendations: aiRecommendations,
       );
       _results = [result, ..._results];
       _error = null;
@@ -59,6 +66,21 @@ class ResultProvider extends ChangeNotifier {
       _error = null;
     } catch (e) {
       _error = e.toString();
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> fetchResultDetails(
+      int moduleId, int quizId, int resultId) async {
+    try {
+      _setLoading(true);
+      _currentResult =
+          await _repository.getResultDetails(moduleId, quizId, resultId);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      _currentResult = null;
     } finally {
       _setLoading(false);
     }

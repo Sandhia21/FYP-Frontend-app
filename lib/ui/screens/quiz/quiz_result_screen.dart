@@ -1,233 +1,268 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../constants/colors.dart';
 import '../../../constants/dimensions.dart';
 import '../../../constants/text_styles.dart';
-import '../../../widgets/common/app_bar.dart';
+import '../../../providers/result_provider.dart';
+import '../../../widgets/common/loading_overlay.dart';
 import '../../../widgets/common/custom_button.dart';
-import '../../../widgets/quiz/quiz_question_view.dart';
-import '../../../constants/button_variant.dart';
-import '../../../data/models/parsed_questions.dart';
-import '../../../services/routes.dart' as app_routes;
+import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../../data/models/result.dart';
+import '../../../widgets/common/app_bar.dart';
 
-class QuizResultScreen extends StatelessWidget {
+class QuizResultScreen extends StatefulWidget {
   final int moduleId;
   final int quizId;
-  final double score;
-  final List<int> userAnswers;
-  final List<ParsedQuestion> questions;
-  final int correctCount;
-  final int totalQuestions;
+  final int resultId;
+  final bool isTeacher;
 
   const QuizResultScreen({
     super.key,
     required this.moduleId,
     required this.quizId,
-    required this.score,
-    required this.userAnswers,
-    required this.questions,
-    required this.correctCount,
-    required this.totalQuestions,
+    required this.resultId,
+    required this.isTeacher,
   });
 
-  String get _scoreMessage {
-    if (score >= 90) return 'Excellent! You\'ve mastered this topic! 🏆';
-    if (score >= 80) return 'Great job! You have a solid understanding! 🌟';
-    if (score >= 70) return 'Good work! Keep practicing to improve! 👍';
-    if (score >= 60) return 'You passed! Review the topics you missed. 📚';
-    return 'Keep practicing! You\'ll improve with more study. 💪';
+  @override
+  State<QuizResultScreen> createState() => _QuizResultScreenState();
+}
+
+class _QuizResultScreenState extends State<QuizResultScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadResultDetails();
   }
 
-  Color get _scoreColor {
-    if (score >= 90) return AppColors.success;
-    if (score >= 70) return AppColors.primary;
-    if (score >= 60) return AppColors.warning;
-    return AppColors.error;
-  }
-
-  IconData get _scoreIcon {
-    if (score >= 90) return Icons.emoji_events;
-    if (score >= 80) return Icons.star;
-    if (score >= 70) return Icons.thumb_up;
-    if (score >= 60) return Icons.check_circle;
-    return Icons.refresh;
+  Future<void> _loadResultDetails() async {
+    if (!mounted) return;
+    final resultProvider = Provider.of<ResultProvider>(context, listen: false);
+    await resultProvider.fetchResultDetails(
+      widget.moduleId,
+      widget.quizId,
+      widget.resultId,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const CustomAppBar(title: 'Quiz Results'),
-      body: Column(
-        children: [
-          // Score Summary Card
-          Card(
-            margin: const EdgeInsets.all(Dimensions.md),
-            child: Container(
-              padding: const EdgeInsets.all(Dimensions.lg),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    _scoreColor.withOpacity(0.1),
-                    Colors.white,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(Dimensions.borderRadiusLg),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(_scoreIcon, color: _scoreColor, size: 32),
-                      const SizedBox(width: Dimensions.md),
-                      Text(
-                        '${score.toStringAsFixed(1)}%',
-                        style: TextStyles.h2.copyWith(color: _scoreColor),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: Dimensions.md),
-                  Text(
-                    _scoreMessage,
-                    style: TextStyles.bodyLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: Dimensions.sm),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildStatCard(
-                        'Correct',
-                        correctCount.toString(),
-                        AppColors.success,
-                      ),
-                      const SizedBox(width: Dimensions.md),
-                      _buildStatCard(
-                        'Total',
-                        totalQuestions.toString(),
-                        AppColors.primary,
-                      ),
-                      const SizedBox(width: Dimensions.md),
-                      _buildStatCard(
-                        'Incorrect',
-                        (totalQuestions - correctCount).toString(),
-                        AppColors.error,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+      appBar: CustomAppBar(
+        title: 'Quiz Result',
+        showBackButton: true,
+        centerTitle: true,
+        hideProfileIcon: true,
+      ),
+      body: Consumer<ResultProvider>(
+        builder: (context, resultProvider, child) {
+          if (resultProvider.isLoading) {
+            return const LoadingOverlay(
+              isLoading: true,
+              child: SizedBox.expand(),
+            );
+          }
 
-          // Questions Review
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Dimensions.md,
-                vertical: Dimensions.sm,
-              ),
-              itemCount: questions.length,
-              itemBuilder: (context, index) {
-                final question = questions[index];
-                final userAnswer =
-                    index < userAnswers.length ? userAnswers[index] : -1;
-                final isCorrect =
-                    userAnswer != -1 && question.isCorrectIndex(userAnswer);
+          if (resultProvider.error != null) {
+            return _buildError(resultProvider.error!);
+          }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: Dimensions.md),
-                  child: QuizQuestionView(
-                    question: question,
-                    questionNumber: index + 1,
-                    selectedOptionIndex: userAnswer,
-                    showCorrectAnswer: true,
-                    isResultView: true,
-                    wasAnsweredCorrectly: userAnswer != -1 ? isCorrect : null,
-                  ),
-                );
-              },
-            ),
-          ),
+          final result = resultProvider.currentResult;
+          if (result == null) {
+            return const Center(
+              child: Text('Result not found'),
+            );
+          }
 
-          // Action Buttons
-          Container(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(Dimensions.md),
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: CustomButton(
-                    text: 'Try Again',
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(
-                        context,
-                        app_routes.AppRoutes.takeQuiz,
-                        arguments: {
-                          'moduleId': moduleId,
-                          'quizId': quizId,
-                        },
-                      );
-                    },
-                    variant: ButtonVariant.outlined,
-                    textColor: AppColors.primary,
-                  ),
+                _buildScoreCard(result),
+                const SizedBox(height: Dimensions.md),
+                _buildQuizContent(result),
+                if (result.aiRecommendations != null) ...[
+                  const SizedBox(height: Dimensions.md),
+                  _buildRecommendations(result.aiRecommendations!),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScoreCard(Result result) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Dimensions.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.isTeacher && result.studentName != null) ...[
+              Text(
+                'Student: ${result.studentName}',
+                style: TextStyles.h3,
+              ),
+              const SizedBox(height: Dimensions.sm),
+            ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Score',
+                      style: TextStyles.bodyLarge,
+                    ),
+                    Text(
+                      '${result.percentage}%',
+                      style: TextStyles.h2.copyWith(
+                        color: _getScoreColor(result.percentage),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: Dimensions.md),
-                Expanded(
-                  child: CustomButton(
-                    icon: Icons.home,
-                    text: 'Dashboard',
-                    onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        app_routes.AppRoutes.home,
-                        (route) => false,
-                      );
-                    },
+                Container(
+                  padding: const EdgeInsets.all(Dimensions.md),
+                  decoration: BoxDecoration(
+                    color: _getScoreColor(result.percentage).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(Dimensions.md),
+                  ),
+                  child: Icon(
+                    _getScoreIcon(result.percentage),
+                    color: _getScoreColor(result.percentage),
+                    size: 48,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: Dimensions.sm),
+            Text(
+              'Submitted: ${_formatDate(result.dateTaken)}',
+              style: TextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuizContent(Result result) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Dimensions.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quiz Answers',
+              style: TextStyles.h3,
+            ),
+            const SizedBox(height: Dimensions.md),
+            MarkdownBody(
+              data: result.quizContent,
+              styleSheet: MarkdownStyleSheet(
+                p: TextStyles.bodyMedium,
+                h1: TextStyles.h2,
+                h2: TextStyles.h3,
+                h3: TextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                listBullet: TextStyles.bodyMedium,
+                blockquote: TextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendations(String recommendations) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Dimensions.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'AI Recommendations',
+              style: TextStyles.h3,
+            ),
+            const SizedBox(height: Dimensions.md),
+            MarkdownBody(
+              data: recommendations,
+              styleSheet: MarkdownStyleSheet(
+                p: TextStyles.bodyMedium,
+                h1: TextStyles.h2,
+                h2: TextStyles.h3,
+                h3: TextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                listBullet: TextStyles.bodyMedium,
+                blockquote: TextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Error loading result',
+            style: TextStyles.h3.copyWith(color: AppColors.error),
+          ),
+          const SizedBox(height: Dimensions.sm),
+          Text(
+            error,
+            style: TextStyles.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: Dimensions.md),
+          CustomButton(
+            text: 'Retry',
+            onPressed: _loadResultDetails,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Dimensions.md,
-        vertical: Dimensions.sm,
-      ),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(Dimensions.borderRadiusMd),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyles.h3.copyWith(color: color),
-          ),
-          Text(
-            label,
-            style: TextStyles.bodySmall.copyWith(color: color),
-          ),
-        ],
-      ),
-    );
+  IconData _getScoreIcon(double percentage) {
+    if (percentage >= 80) {
+      return Icons.emoji_events;
+    } else if (percentage >= 60) {
+      return Icons.thumb_up;
+    } else {
+      return Icons.refresh;
+    }
+  }
+
+  Color _getScoreColor(double percentage) {
+    if (percentage >= 80) {
+      return AppColors.success;
+    } else if (percentage >= 60) {
+      return AppColors.warning;
+    } else {
+      return AppColors.error;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

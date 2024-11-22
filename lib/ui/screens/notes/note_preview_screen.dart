@@ -79,8 +79,16 @@ class _NotePreviewScreenState extends State<NotePreviewScreen> {
         _contentController.text,
         fromAI: true,
       );
+
       if (mounted) {
+        // Pop the preview screen
         Navigator.pop(context, true);
+        // Pop the note creation dialog
+        Navigator.pop(context, true);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Note created successfully')),
+        );
       }
     } catch (e) {
       setState(() => _error = e.toString());

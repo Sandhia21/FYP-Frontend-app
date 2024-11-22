@@ -1,46 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:motion_tab_bar_v2/motion-tab-bar.dart';
-import 'package:motion_tab_bar_v2/motion-tab-controller.dart';
-import 'package:app/constants/constants.dart';
 
-class BottomNavigation extends StatelessWidget {
-  final MotionTabBarController controller;
+class CustomBottomNav extends StatelessWidget {
   final int currentIndex;
+  final Function(int) onIndexChanged;
 
-  const BottomNavigation({
-    Key? key,
-    required this.controller,
+  const CustomBottomNav({
+    super.key,
     required this.currentIndex,
-  }) : super(key: key);
+    required this.onIndexChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MotionTabBar(
-      controller: controller,
-      initialSelectedTab: "Home",
-      labels: const ["Home", "Courses", "Quizzes", "Profile"],
-      icons: const [
-        Icons.home_outlined,
-        Icons.menu_book_outlined,
-        Icons.quiz_outlined,
-        Icons.person_outline,
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: onIndexChanged,
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: Theme.of(context).primaryColor,
+      unselectedItemColor: Colors.grey,
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.explore_outlined),
+          activeIcon: Icon(Icons.explore),
+          label: 'Explore',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
+          label: 'Profile',
+        ),
       ],
-      badges: const [null, null, null, null],
-      tabSize: 50,
-      tabBarHeight: 55,
-      textStyle: TextStyles.caption.copyWith(
-        color: AppColors.primary,
-        fontWeight: FontWeight.w600,
-      ),
-      tabIconColor: AppColors.grey,
-      tabIconSize: 28.0,
-      tabIconSelectedSize: 26.0,
-      tabSelectedColor: AppColors.primary,
-      tabIconSelectedColor: AppColors.white,
-      tabBarColor: AppColors.white,
-      onTabItemSelected: (int value) {
-        controller.index = value;
-      },
     );
   }
 }

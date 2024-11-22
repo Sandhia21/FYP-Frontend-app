@@ -229,7 +229,7 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen>
                           ),
                           ResultSection(
                             moduleId: widget.moduleId,
-                            quizId: _quizId ?? 0,
+                            // quizId: _quizId ?? 0,
                             isTeacher: widget.isTeacher,
                           ),
                         ],

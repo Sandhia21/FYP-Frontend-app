@@ -33,9 +33,7 @@ import 'services/result_api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  AIService.initialize(
-      apiKey:
-          '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');
+  AIService.initialize(apiKey: '');
 
   // Initialize API services
   final authService = AuthApiService();
@@ -138,9 +136,10 @@ class MyApp extends StatelessWidget {
             themeMode: ThemeMode.system,
             debugShowCheckedModeBanner: false,
             initialRoute: authProvider.isAuthenticated
-                ? AppRoutes.home
+                ? AppRoutes.main
                 : AppRoutes.welcome,
             onGenerateRoute: AppRoutes.generateRoute,
+            navigatorKey: AppRoutes.navigatorKey,
           );
         },
       ),

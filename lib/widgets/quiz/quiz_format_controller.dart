@@ -1,4 +1,4 @@
-import '../data/models/parsed_questions.dart';
+import '../../data/models/parsed_questions.dart';
 
 class QuizFormatController {
   static final QuizFormatController _instance =

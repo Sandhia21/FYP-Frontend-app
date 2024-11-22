@@ -20,16 +20,27 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _user != null;
 
-  List<Course> get enrolledCourses =>
-      _profile?.enrolledCourses
-          .map((course) => Course.fromJson(course))
-          .toList() ??
-      [];
-  List<Course> get createdCourses =>
-      _profile?.createdCourses
-          .map((course) => Course.fromJson(course))
-          .toList() ??
-      [];
+  List<Course> get enrolledCourses => isStudent
+      ? (_profile?.enrolledCourses
+              .map((course) => Course.fromJson(course))
+              .toList() ??
+          [])
+      : [];
+  List<Course> get createdCourses => isTeacher
+      ? (_profile?.createdCourses
+              .map((course) => Course.fromJson(course))
+              .toList() ??
+          [])
+      : [];
+
+  List<Course> get relevantCourses {
+    if (isTeacher) {
+      return createdCourses;
+    } else if (isStudent) {
+      return enrolledCourses;
+    }
+    return [];
+  }
 
   Future<void> login(String username, String password) async {
     try {
@@ -207,13 +218,4 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isTeacher => _profile?.role == 'teacher';
   bool get isStudent => _profile?.role == 'student';
-
-  List<Course> get userCourses {
-    if (isTeacher) {
-      return createdCourses;
-    } else if (isStudent) {
-      return enrolledCourses;
-    }
-    return [];
-  }
 }

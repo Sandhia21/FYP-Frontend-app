@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../data/models/quiz.dart';
 import '../data/models/parsed_questions.dart';
 import '../data/repositories/quiz_repository.dart';
-import '../controllers/quiz_format_controller.dart';
+import '../widgets/quiz/quiz_format_controller.dart';
 import '../services/ai_service.dart';
 import '../data/models/quiz_attempt_info.dart';
 

@@ -46,7 +46,7 @@ class QuizApiService {
           'module': moduleId,
           'description': description,
           'content': content,
-          'quiz_duration': duration,
+          'duration': duration,
           'from_ai': fromAi,
           'note': note,
           'max_attempts': maxAttempts,

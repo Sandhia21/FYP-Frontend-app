@@ -258,14 +258,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       vertical: Dimensions.md,
                     ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          note.title,
-                          style: TextStyles.h2,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
-                        ),
+                        if (widget.isTeacher)
+                          Text(
+                            'Notes Based on ${note.title}',
+                            style: TextStyles.h2,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                          ),
                         const SizedBox(height: Dimensions.lg),
                         MarkdownBody(
                           data: note.content,

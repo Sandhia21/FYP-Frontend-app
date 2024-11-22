@@ -53,6 +53,18 @@ class CourseRepository {
     }
   }
 
+  Future<Course> createCourseWithImage(Course course, String imagePath) async {
+    try {
+      final response = await _courseService.createCourseWithImage(
+        course.toCreateJson(),
+        imagePath,
+      );
+      return Course.fromJson(response);
+    } catch (e) {
+      throw _handleRepositoryError(e);
+    }
+  }
+
   String _handleRepositoryError(dynamic error) {
     if (error is String) {
       switch (error.toLowerCase()) {

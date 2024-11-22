@@ -6,6 +6,7 @@ class Result {
   final String quizContent;
   final String? aiRecommendations;
   final DateTime dateTaken;
+  final String? studentName;
 
   Result({
     required this.id,
@@ -15,6 +16,7 @@ class Result {
     required this.quizContent,
     this.aiRecommendations,
     required this.dateTaken,
+    this.studentName,
   });
 
   factory Result.fromJson(Map<String, dynamic> json) {
@@ -22,10 +24,13 @@ class Result {
       id: json['id'],
       quizId: json['quiz'],
       studentId: json['student'],
-      percentage: json['percentage'].toDouble(),
+      percentage: (json['percentage'] is int)
+          ? json['percentage'].toDouble()
+          : json['percentage'],
       quizContent: json['quiz_content'],
       aiRecommendations: json['ai_recommendations'],
       dateTaken: DateTime.parse(json['date_taken']),
+      studentName: json['student_name'],
     );
   }
 
@@ -38,6 +43,7 @@ class Result {
       'quiz_content': quizContent,
       'ai_recommendations': aiRecommendations,
       'date_taken': dateTaken.toIso8601String(),
+      'student_name': studentName,
     };
   }
 }

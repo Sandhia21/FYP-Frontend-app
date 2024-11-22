@@ -88,6 +88,31 @@ class CourseApiService {
     }
   }
 
+  Future<Map<String, dynamic>> createCourseWithImage(
+    Map<String, dynamic> courseData,
+    String imagePath,
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        ...courseData,
+        'image': await MultipartFile.fromFile(imagePath),
+      });
+
+      final response = await _dio.post(
+        '/courses/',
+        data: formData,
+        options: Options(
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   String _handleError(DioException e) {
     if (e.response != null) {
       if (e.response!.statusCode == 401) {

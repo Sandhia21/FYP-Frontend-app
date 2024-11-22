@@ -20,6 +20,7 @@ class ResultRepository {
     required int quizId,
     required double percentage,
     required String quizContent,
+    String? aiRecommendations,
   }) async {
     try {
       final response = await _resultService.submitResult(
@@ -27,6 +28,7 @@ class ResultRepository {
         quizId: quizId,
         percentage: percentage,
         quizContent: quizContent,
+        aiRecommendations: aiRecommendations,
       );
       return Result.fromJson(response);
     } catch (e) {
@@ -37,6 +39,17 @@ class ResultRepository {
   Future<Map<String, dynamic>> getLeaderboard(int moduleId, int quizId) async {
     try {
       return await _resultService.getLeaderboard(moduleId, quizId);
+    } catch (e) {
+      throw _handleRepositoryError(e);
+    }
+  }
+
+  Future<Result> getResultDetails(
+      int moduleId, int quizId, int resultId) async {
+    try {
+      final response =
+          await _resultService.getResultDetails(moduleId, quizId, resultId);
+      return Result.fromJson(response);
     } catch (e) {
       throw _handleRepositoryError(e);
     }

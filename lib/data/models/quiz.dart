@@ -1,5 +1,5 @@
 import 'parsed_questions.dart';
-import '../../controllers/quiz_format_controller.dart';
+import '../../widgets/quiz/quiz_format_controller.dart';
 
 class Quiz {
   final int id;

@@ -12,6 +12,7 @@ import '../../../../widgets/quiz/quiz_question_view.dart';
 import '../../../../data/models/quiz.dart';
 
 import '../../../../services/routes.dart' as app_routes;
+import '../../../../services/ai_service.dart';
 
 class QuizAttemptScreen extends StatefulWidget {
   final int moduleId;
@@ -175,16 +176,39 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
       // Calculate score locally
       int correctAnswers = 0;
       final questions = quiz.parsedQuestions;
+      final questionResults = <Map<String, dynamic>>[];
 
       for (int i = 0; i < questions.length; i++) {
-        if (i < userAnswers.length &&
+        final isCorrect = i < userAnswers.length &&
             userAnswers[i] != -1 &&
-            questions[i].isCorrectIndex(userAnswers[i])) {
-          correctAnswers++;
-        }
+            questions[i].isCorrectIndex(userAnswers[i]);
+
+        if (isCorrect) correctAnswers++;
+
+        questionResults.add({
+          'question': questions[i].question,
+          'correct': isCorrect,
+          'user_answer': userAnswers[i] != -1
+              ? questions[i].options[userAnswers[i]]
+              : 'Not answered',
+          'correct_answer':
+              questions[i].options[questions[i].correctOptionIndex],
+        });
       }
 
       final score = (correctAnswers / questions.length) * 100;
+
+      // Generate AI recommendations
+      String aiRecommendations;
+      try {
+        aiRecommendations = await AIService.generateRecommendations(
+          quizResults: questionResults,
+          subject: quiz.title,
+        );
+      } catch (e) {
+        // Fallback if AI recommendations fail
+        aiRecommendations = 'Unable to generate recommendations at this time.';
+      }
 
       // Submit result to server
       final resultProvider = navigatorContext.read<ResultProvider>();
@@ -193,6 +217,7 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
         quizId: widget.quizId,
         percentage: score,
         quizContent: quiz.content,
+        aiRecommendations: aiRecommendations,
       );
 
       if (!mounted) return;

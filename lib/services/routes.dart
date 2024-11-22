@@ -20,8 +20,27 @@ import '../ui/screens/quiz/teacher/quiz_detail_screen.dart';
 import '../data/models/parsed_questions.dart';
 import '../ui/screens/quiz/create_quiz_screen.dart';
 import '../data/models/quiz.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import '../data/models/profile.dart';
+import '../ui/screens/main_screen.dart';
 
 class AppRoutes {
+  // Add this static key at the top of the class
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
+  // Utility method to check if user is teacher and owner of the course
+  static bool isTeacherAndOwner(Profile? userProfile, int courseId) {
+    if (userProfile == null) return false;
+
+    // Check if user is a teacher
+    if (userProfile.role != 'teacher') return false;
+
+    // Check if user created this course
+    return userProfile.createdCourses.any((course) => course['id'] == courseId);
+  }
+
   // Auth Routes
   static const String welcome = '/';
   static const String login = '/login';
@@ -54,6 +73,7 @@ class AppRoutes {
   static const String explore = '/explore';
   static const String notifications = '/notifications';
   static const String profile = '/profile';
+  static const String main = '/main';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -115,11 +135,19 @@ class AppRoutes {
             ),
           );
         }
+
+        // Get the user profile from Provider
+        final userProfile = Provider.of<AuthProvider>(
+                navigatorKey.currentContext!,
+                listen: false)
+            .profile;
+
         return MaterialPageRoute(
           builder: (_) => ModuleDetailScreen(
             moduleId: args['moduleId'] as int,
             courseId: args['courseId'] as int,
-            isTeacher: args['isTeacher'] as bool? ?? false,
+            // Use the utility method to determine if user is teacher and owner
+            isTeacher: isTeacherAndOwner(userProfile, args['courseId'] as int),
           ),
         );
 
@@ -133,11 +161,18 @@ class AppRoutes {
             ),
           );
         }
+
+        final userProfile = Provider.of<AuthProvider>(
+                navigatorKey.currentContext!,
+                listen: false)
+            .profile;
+
         return MaterialPageRoute(
           builder: (_) => NoteDetailScreen(
             moduleId: args['moduleId'] as int,
             noteId: args['noteId'] as int?,
-            isTeacher: args['isTeacher'] as bool? ?? false,
+            // Pass the courseId in args and use it to check ownership
+            isTeacher: isTeacherAndOwner(userProfile, args['courseId'] as int),
           ),
         );
 
@@ -254,31 +289,13 @@ class AppRoutes {
         );
 
       case quizResult:
-        final args = settings.arguments as Map<String, dynamic>?;
-        if (args == null ||
-            !args.containsKey('moduleId') ||
-            !args.containsKey('quizId') ||
-            !args.containsKey('score') ||
-            !args.containsKey('userAnswers') ||
-            !args.containsKey('questions') ||
-            !args.containsKey('correctCount') ||
-            !args.containsKey('totalQuestions')) {
-          return MaterialPageRoute(
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('Invalid quiz result parameters')),
-            ),
-          );
-        }
-
+        final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
           builder: (_) => QuizResultScreen(
-            moduleId: args['moduleId'] as int,
-            quizId: args['quizId'] as int,
-            score: args['score'] as double,
-            userAnswers: List<int>.from(args['userAnswers'] as List),
-            questions: List<ParsedQuestion>.from(args['questions'] as List),
-            correctCount: args['correctCount'] as int,
-            totalQuestions: args['totalQuestions'] as int,
+            moduleId: args['moduleId'],
+            quizId: args['quizId'],
+            resultId: args['resultId'],
+            isTeacher: args['isTeacher'],
           ),
         );
 
@@ -311,6 +328,9 @@ class AppRoutes {
             quiz: args['quiz'] as Quiz?, // Optional parameter for editing
           ),
         );
+
+      case main:
+        return MaterialPageRoute(builder: (_) => const MainScreen());
 
       default:
         return MaterialPageRoute(

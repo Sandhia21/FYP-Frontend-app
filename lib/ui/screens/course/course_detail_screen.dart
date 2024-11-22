@@ -78,7 +78,37 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   }
 
   Future<void> _refreshData() async {
-    await _initializeData();
+    if (!mounted) return;
+
+    setState(() => _isInitializing = true);
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final courseProvider =
+          Provider.of<CourseProvider>(context, listen: false);
+      final moduleProvider =
+          Provider.of<ModuleProvider>(context, listen: false);
+
+      // Refresh all relevant data in parallel
+      await Future.wait([
+        authProvider.fetchProfile(),
+        courseProvider.getCourseDetail(widget.courseId),
+        moduleProvider.fetchModules(widget.courseId),
+      ]);
+
+      // Add a small delay for smooth transition
+      await Future.delayed(const Duration(milliseconds: 300));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error refreshing data: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isInitializing = false);
+      }
+    }
   }
 
   Future<void> _showEditCourseDialog(Course course) async {
@@ -190,8 +220,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You are already enrolled in this course'),
-          ),
+              content: Text('You are already enrolled in this course')),
         );
       }
       return;
@@ -200,27 +229,45 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     try {
       final result = await showDialog<bool>(
         context: context,
+        barrierDismissible: false, // Prevent dismissing by tapping outside
         builder: (context) => EnrollmentDialog(courseId: courseId),
       );
 
       if (result == true && mounted) {
-        // Refresh the user profile to get updated enrolled courses
-        await authProvider.fetchProfile();
+        // First refresh the data
+        await Future.wait([
+          // Refresh user profile to get updated enrolled courses
+          authProvider.fetchProfile(),
+          // Refresh course details
+          Provider.of<CourseProvider>(context, listen: false)
+              .getCourseDetail(courseId),
+          // Refresh module list if needed
+          Provider.of<ModuleProvider>(context, listen: false)
+              .fetchModules(courseId),
+        ]);
 
-        // Refresh the course details
-        await Provider.of<CourseProvider>(context, listen: false)
-            .getCourseDetail(courseId);
-
+        // Show success message
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Successfully enrolled in course')),
+            const SnackBar(
+              content: Text('Successfully enrolled in course'),
+              duration: Duration(seconds: 2),
+            ),
           );
+        }
+
+        // Trigger a complete refresh of the screen
+        if (mounted) {
+          await _refreshData();
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error enrolling in course: ${e.toString()}')),
+          SnackBar(
+            content: Text('Error enrolling in course: ${e.toString()}'),
+            duration: Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -236,35 +283,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         final userProfile = authProvider.profile;
 
         final isTeacherAndOwner = _isTeacherAndOwner(course, userProfile);
-        final isStudentEnrolled = _isStudentEnrolled(course, userProfile);
+        // final isStudentEnrolled = _isStudentEnrolled(course, userProfile);
 
         return Scaffold(
           appBar: CustomAppBar(
             title: course.name.isEmpty ? 'Course Details' : course.name,
-            actions: isTeacherAndOwner && course.id != 0
-                ? [
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: AppColors.white),
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          await _showEditCourseDialog(course);
-                        } else if (value == 'delete') {
-                          await _showDeleteConfirmation(context, course.id);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text('Edit Course'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Delete Course'),
-                        ),
-                      ],
-                    ),
-                  ]
-                : null,
           ),
           body: LoadingOverlay(
             isLoading: isLoading,
@@ -352,6 +375,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         debugPrint('course creator: ${course.createdByUsername}');
         debugPrint('userProfile username: ${userProfile?.username}');
         debugPrint('enrolled courses: ${userProfile?.enrolledCourses}');
+        debugPrint(
+            'course id: ${course.id}, course name: ${course.name}, course Image: ${course.imageUrl}');
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(Dimensions.lg),
@@ -367,6 +392,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                         height: 200,
                         width: double.infinity,
                         fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          print('Error loading image: $error');
+                          return Image.asset(
+                            'assets/images/default_course.png',
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          );
+                        },
                       )
                     : Image.asset(
                         'assets/images/default_course.png',
@@ -422,17 +456,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 ),
               ),
               const SizedBox(height: Dimensions.md),
-              Text(
-                'Course Code: ${course.courseCode}',
-                style: TextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
+              if (isTeacherAndOwner)
+                Text(
+                  'Course Code: ${course.courseCode}',
+                  style: TextStyles.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
-
               // Students Count
               const SizedBox(height: Dimensions.md),
-              Row(
-                children: const [
+              const Row(
+                children: [
                   Icon(
                     Icons.group_outlined,
                     color: AppColors.textSecondary,

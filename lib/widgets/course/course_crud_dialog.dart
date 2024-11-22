@@ -5,13 +5,18 @@ import '../../../data/models/course.dart';
 import '../../../providers/course_provider.dart';
 import '../../../widgets/common/custom_button.dart';
 import '../../../widgets/common/loading_overlay.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../../../constants/button_variant.dart';
 
 class CourseCrudDialog extends StatefulWidget {
   final Course? course;
+  final Function(Course course, String? imagePath)? onSubmit;
 
   const CourseCrudDialog({
     Key? key,
     this.course,
+    this.onSubmit,
   }) : super(key: key);
 
   @override
@@ -24,6 +29,7 @@ class _CourseCrudDialogState extends State<CourseCrudDialog> {
   late TextEditingController _descriptionController;
   bool _isLoading = false;
   String? _error;
+  File? _selectedImage;
 
   bool get isEditing => widget.course != null;
 
@@ -42,6 +48,22 @@ class _CourseCrudDialogState extends State<CourseCrudDialog> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+
+    if (image != null) {
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -51,24 +73,32 @@ class _CourseCrudDialogState extends State<CourseCrudDialog> {
     });
 
     try {
-      final courseProvider =
-          Provider.of<CourseProvider>(context, listen: false);
+      final courseData = isEditing
+          ? widget.course!.copyWith(
+              name: _nameController.text.trim(),
+              description: _descriptionController.text.trim(),
+            )
+          : Course.forCreate(
+              name: _nameController.text.trim(),
+              description: _descriptionController.text.trim(),
+              courseCode: '',
+            );
 
-      if (isEditing) {
-        // Update existing course
-        final updatedCourse = widget.course!.copyWith(
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim(),
-        );
-        await courseProvider.updateCourse(updatedCourse);
+      if (widget.onSubmit != null) {
+        await widget.onSubmit!(courseData, _selectedImage?.path);
       } else {
-        // Create new course
-        final newCourse = Course.forCreate(
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim(),
-          courseCode: '', // Empty for new courses as it's handled by backend
-        );
-        await courseProvider.createCourse(newCourse);
+        final courseProvider =
+            Provider.of<CourseProvider>(context, listen: false);
+        if (isEditing) {
+          await courseProvider.updateCourse(courseData);
+        } else {
+          if (_selectedImage != null) {
+            await courseProvider.createCourseWithImage(
+                courseData, _selectedImage!.path);
+          } else {
+            await courseProvider.createCourse(courseData);
+          }
+        }
       }
 
       if (mounted) {
@@ -85,99 +115,245 @@ class _CourseCrudDialogState extends State<CourseCrudDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return Dialog(
+      backgroundColor: AppColors.surface,
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: Dimensions.md,
+        vertical: Dimensions.lg,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Dimensions.borderRadiusLg),
       ),
       child: LoadingOverlay(
         isLoading: _isLoading,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(Dimensions.lg),
+        child: Container(
+          width: screenSize.width,
+          constraints: BoxConstraints(
+            maxWidth: 600,
+            maxHeight: screenSize.height * 0.9,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Text(
-                isEditing ? 'Edit Course' : 'Create Course',
-                style: TextStyles.h2,
-              ),
-              const SizedBox(height: Dimensions.md),
-
-              // Form
-              Form(
-                key: _formKey,
-                child: Column(
+              Container(
+                padding: const EdgeInsets.all(Dimensions.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.05),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(Dimensions.borderRadiusLg),
+                    topRight: Radius.circular(Dimensions.borderRadiusLg),
+                  ),
+                ),
+                child: Row(
                   children: [
-                    // Course Name
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Course Name',
-                        hintText: 'Enter course name',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a course name';
-                        }
-                        return null;
-                      },
+                    Icon(
+                      isEditing ? Icons.edit_note : Icons.add_box_rounded,
+                      color: AppColors.primary,
+                      size: Dimensions.iconLg,
                     ),
-                    const SizedBox(height: Dimensions.md),
-
-                    // Course Description
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        hintText: 'Enter course description',
-                      ),
-                      maxLines: 3,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a description';
-                        }
-                        return null;
-                      },
+                    const SizedBox(width: Dimensions.md),
+                    Text(
+                      isEditing ? 'Edit Course' : 'Create New Course',
+                      style: TextStyles.h3.copyWith(color: AppColors.primary),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: Dimensions.md),
 
-              // Error Message
-              if (_error != null) ...[
-                Text(
-                  _error!,
-                  style: TextStyles.error,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(Dimensions.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Image Picker
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: AppColors.backgroundGrey,
+                            borderRadius: BorderRadius.circular(
+                                Dimensions.borderRadiusMd),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.2),
+                            ),
+                          ),
+                          child: _selectedImage != null
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                          Dimensions.borderRadiusMd),
+                                      child: Image.file(
+                                        _selectedImage!,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: Dimensions.sm,
+                                      right: Dimensions.sm,
+                                      child: CustomButton(
+                                        icon: Icons.edit,
+                                        text: 'Change',
+                                        onPressed: _pickImage,
+                                        backgroundColor:
+                                            AppColors.primary.withOpacity(0.9),
+                                        textColor: AppColors.white,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_photo_alternate_rounded,
+                                      size: Dimensions.iconLg,
+                                      color: AppColors.primary.withOpacity(0.5),
+                                    ),
+                                    const SizedBox(height: Dimensions.sm),
+                                    Text(
+                                      'Add Course Image',
+                                      style: TextStyles.bodyMedium.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: Dimensions.xl),
+
+                      // Form
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextFormField(
+                              controller: _nameController,
+                              decoration: InputDecoration(
+                                labelText: 'Course Name',
+                                hintText: 'Enter the name of your course',
+                                prefixIcon: const Icon(
+                                  Icons.school,
+                                  color: AppColors.primary,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      Dimensions.borderRadiusMd),
+                                ),
+                                filled: true,
+                                fillColor: AppColors.backgroundGrey,
+                              ),
+                              style: TextStyles.input,
+                              validator: (value) {
+                                if (value?.isEmpty ?? true) {
+                                  return 'Please enter a course name';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: Dimensions.lg),
+                            TextFormField(
+                              controller: _descriptionController,
+                              maxLines: 4,
+                              decoration: InputDecoration(
+                                labelText: 'Description',
+                                hintText: 'Enter course description',
+                                prefixIcon: const Icon(
+                                  Icons.description,
+                                  color: AppColors.primary,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      Dimensions.borderRadiusMd),
+                                ),
+                                filled: true,
+                                fillColor: AppColors.backgroundGrey,
+                              ),
+                              style: TextStyles.input,
+                              validator: (value) {
+                                if (value?.isEmpty ?? true) {
+                                  return 'Please enter a course description';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (_error != null) ...[
+                        const SizedBox(height: Dimensions.md),
+                        Container(
+                          padding: const EdgeInsets.all(Dimensions.md),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(
+                                Dimensions.borderRadiusMd),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline,
+                                  color: AppColors.error),
+                              const SizedBox(width: Dimensions.sm),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: TextStyles.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: Dimensions.md),
-              ],
+              ),
 
               // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: CustomButton(
-                      text: 'Cancel',
-                      onPressed: () => Navigator.of(context).pop(false),
-                      isOutlined: true,
-                    ),
+              Container(
+                padding: const EdgeInsets.all(Dimensions.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(
+                    top: BorderSide(color: AppColors.divider.withOpacity(0.2)),
                   ),
-                  const SizedBox(width: Dimensions.md),
-                  Expanded(
-                    child: CustomButton(
-                      text: isEditing ? 'Update' : 'Create',
-                      onPressed: _handleSubmit,
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primary,
-                          AppColors.primary.withOpacity(0.8),
-                        ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CustomButton(
+                        text: 'Cancel',
+                        onPressed: () => Navigator.of(context).pop(),
+                        variant: ButtonVariant.outlined,
+                        backgroundColor: AppColors.surface,
+                        textColor: AppColors.textSecondary,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: Dimensions.md),
+                    Expanded(
+                      child: CustomButton(
+                        text: isEditing ? 'Update Course' : 'Create Course',
+                        onPressed: _handleSubmit,
+                        isLoading: _isLoading,
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primary,
+                            AppColors.primaryLight,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

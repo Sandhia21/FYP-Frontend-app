@@ -133,7 +133,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           BorderRadius.circular(Dimensions.borderRadiusSm),
                       image: DecorationImage(
                         image: NetworkImage(
-                            "http://10.0.2.2:8000${request.courseImage}"),
+                            "http://192.168.100.6:8000${request.courseImage}"),
                         fit: BoxFit.cover,
                       ),
                     ),

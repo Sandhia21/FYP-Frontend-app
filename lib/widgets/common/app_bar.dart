@@ -29,7 +29,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.user;
-    final baseUrl = 'http://10.0.2.2:8000/'; // Move this to constants
+    final baseUrl = 'http://192.168.100.6:8000/'; // Move this to constants
 
     return Container(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),

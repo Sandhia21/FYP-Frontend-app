@@ -110,6 +110,24 @@ class CourseProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> createCourseWithImage(Course course, String imagePath) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final createdCourse =
+          await _repository.createCourseWithImage(course, imagePath);
+      _courses.add(createdCourse);
+    } catch (e) {
+      _error = e.toString();
+      throw e;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

@@ -20,6 +20,7 @@ class ResultApiService {
     required int quizId,
     required double percentage,
     required String quizContent,
+    String? aiRecommendations,
   }) async {
     try {
       final response = await _dio.post(
@@ -27,6 +28,8 @@ class ResultApiService {
         data: {
           'percentage': percentage.toInt(),
           'quiz_content': quizContent,
+          if (aiRecommendations != null)
+            'ai_recommendations': aiRecommendations,
         },
       );
       return response.data;
@@ -46,16 +49,41 @@ class ResultApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getResultDetails(
+      int moduleId, int quizId, int resultId) async {
+    try {
+      final response = await _dio.get(
+        '/results/$moduleId/quizzes/$quizId/results/$resultId/',
+      );
+
+      if (response.data == null) {
+        throw 'Result not found';
+      }
+
+      return response.data;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   String _handleError(DioException e) {
     if (e.response != null) {
       if (e.response!.statusCode == 401) {
         return 'Please login to access results';
       }
+      if (e.response!.statusCode == 404) {
+        return 'Result not found';
+      }
+      if (e.response!.statusCode == 403) {
+        return 'Permission denied';
+      }
       if (e.response!.data is Map) {
-        if (e.response!.data['code'] == 'duplicate_submission') {
-          return 'You have already submitted this quiz';
+        if (e.response!.data['error'] == 'Maximum attempts reached') {
+          return 'You have reached the maximum number of attempts for this quiz';
         }
-        return e.response!.data['detail'] ?? 'An error occurred';
+        return e.response!.data['error'] ??
+            e.response!.data['detail'] ??
+            'An error occurred';
       }
       return e.response!.statusMessage ?? 'An error occurred';
     }

@@ -13,6 +13,8 @@ import 'package:app/services/routes.dart';
 import 'package:app/data/models/course.dart';
 import 'package:app/widgets/course/course_crud_dialog.dart';
 import 'package:app/ui/screens/home/explore_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -68,12 +70,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _showCreateCourseDialog() async {
     final result = await showDialog(
       context: context,
-      builder: (context) =>
-          const CourseCrudDialog(), // No course means create mode
+      builder: (context) => Dialog(
+        child: CourseCrudDialog(
+          onSubmit: (Course course, String? imagePath) async {
+            if (imagePath != null) {
+              await Provider.of<CourseProvider>(context, listen: false)
+                  .createCourseWithImage(course, imagePath);
+            } else {
+              await Provider.of<CourseProvider>(context, listen: false)
+                  .createCourse(course);
+            }
+          },
+        ),
+      ),
     );
 
     if (result == true && mounted) {
-      await _loadInitialData(); // Refresh courses after creation
+      await _loadInitialData();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Course created successfully')),
       );
@@ -86,6 +99,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final courseProvider = Provider.of<CourseProvider>(context);
     final user = authProvider.user;
 
+    // Get relevant courses based on user role
+    final relevantCourses = authProvider.relevantCourses;
+
     return Scaffold(
       appBar: CustomAppBar(
         title: 'VirtuLearn',
@@ -96,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       body: SafeArea(
         child: LoadingOverlay(
-          isLoading: courseProvider.isLoading,
+          isLoading: courseProvider.isLoading || authProvider.isLoading,
           child: RefreshIndicator(
             onRefresh: _loadInitialData,
             child: CustomScrollView(
@@ -114,46 +130,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               Expanded(
                                 child: StatsCard(
                                   title: 'Courses',
-                                  value:
-                                      courseProvider.courses.length.toString(),
+                                  value: relevantCourses.length.toString(),
                                   icon: Icons.book_outlined,
                                   gradient: const LinearGradient(
                                     colors: [
                                       AppColors.primary,
                                       AppColors.primaryLight
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: Dimensions.md),
-                              Expanded(
-                                child: StatsCard(
-                                  title: 'Quizzes',
-                                  value: courseProvider.totalQuizzes.toString(),
-                                  icon: Icons.quiz_outlined,
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.secondary,
-                                      AppColors.secondaryLight
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: Dimensions.md),
-                              Expanded(
-                                child: StatsCard(
-                                  title: 'Progress',
-                                  value:
-                                      '${courseProvider.averageProgress.toStringAsFixed(0)}%',
-                                  icon: Icons.trending_up_outlined,
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.success,
-                                      AppColors.successLight
                                     ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
@@ -213,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       }
 
                       final filteredCourses =
-                          _getFilteredCourses(courseProvider.courses);
+                          _getFilteredCourses(relevantCourses);
 
                       if (filteredCourses.isEmpty) {
                         return SliverToBoxAdapter(
@@ -296,10 +278,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: const Icon(Icons.add),
             )
           : null,
-      bottomNavigationBar: BottomNavigation(
-        controller: _tabController,
-        currentIndex: _tabController.index,
-      ),
     );
   }
 }
