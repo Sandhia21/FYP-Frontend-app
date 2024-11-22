@@ -1,0 +1,241 @@
+#results/views.py
+from rest_framework import generics, permissions, status
+from quizzes.models import Quiz
+from rest_framework.exceptions import NotFound, ValidationError
+from .models import Result
+from .serializers import ResultSerializer
+from quizzes.models import Quiz
+from .ai_result import AIResultManager
+from django.contrib.auth import get_user_model
+import logging
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.db.models import Count, Avg
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
+
+logger = logging.getLogger(__name__)
+User = get_user_model()
+
+class ResultListCreateView(generics.ListCreateAPIView):
+    serializer_class = ResultSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        quiz = self.get_quiz()
+        if self.request.user.role == 'teacher':
+            return Result.objects.filter(quiz=quiz)
+        return Result.objects.filter(quiz=quiz, student=self.request.user)
+
+    def get_quiz(self):
+        try:
+            return Quiz.objects.get(
+                pk=self.kwargs['quiz_pk'], 
+                module_id=self.kwargs['module_pk']
+            )
+        except Quiz.DoesNotExist:
+            raise NotFound("Quiz not found.")
+
+    def perform_create(self, serializer):
+        logger.info("Request data: %s", self.request.data)
+        quiz = self.get_quiz()
+        
+        # Check for existing result
+        if Result.objects.filter(quiz=quiz, student=self.request.user).exists():
+            raise ValidationError({
+                "detail": "You have already submitted this quiz.",
+                "code": "duplicate_submission"
+            })
+
+        try:
+            # Generate AI recommendations based on the concatenated quiz content
+            ai_manager = AIResultManager()
+            recommendations = ai_manager.generate_result(
+                quiz_content=self.request.data.get('quiz_content'),
+                percentage=self.request.data.get('percentage')
+            )
+            
+            # Save the result with AI recommendations
+            serializer.save(
+                quiz=quiz,
+                student=self.request.user,
+                ai_recommendations=recommendations
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating quiz result: {str(e)}")
+            raise ValidationError({
+                "detail": "Failed to process quiz result. Please try again.",
+                "code": "processing_error"
+            })
+
+class ResultDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ResultSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Result.objects.filter(quiz__module_id=self.kwargs['module_pk'])
+
+class QuizLeaderboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, module_pk, quiz_pk):
+        # Ensure the user is a teacher
+        if request.user.role != 'teacher':
+            raise PermissionDenied("Only teachers can view the leaderboard.")
+
+        try:
+            quiz = Quiz.objects.get(pk=quiz_pk, module_id=module_pk)
+            
+            # Get quiz statistics
+            total_students = User.objects.filter(role='student').count()
+            submitted_count = Result.objects.filter(quiz=quiz).count()
+            
+            # Get results ordered by percentage
+            results = Result.objects.filter(quiz=quiz).select_related('student').order_by('-percentage')
+            
+            # Calculate average score
+            avg_score = results.aggregate(Avg('percentage'))['percentage__avg'] or 0
+
+            leaderboard_data = {
+                'quiz_title': quiz.title,
+                'total_students': total_students,
+                'submitted_count': submitted_count,
+                'pending_count': total_students - submitted_count,
+                'average_score': round(avg_score, 2),
+                'submissions': [
+                    {
+                        'student_name': result.student.get_full_name() or result.student.username,
+                        'percentage': result.percentage,
+                        'submitted_at': result.date_taken,
+                        'ai_recommendations': result.ai_recommendations
+                    } for result in results
+                ]
+            }
+
+            return Response(leaderboard_data)
+
+        except Quiz.DoesNotExist:
+            raise NotFound("Quiz not found.")
+        except Exception as e:
+            logger.error(f"Error fetching leaderboard: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch leaderboard data"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+#results/models.py
+from django.db import models
+from django.conf import settings
+from quizzes.models import Quiz
+from django.utils import timezone
+
+class Result(models.Model):
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='quiz_result_set')
+    student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='student_result_set')
+    percentage = models.PositiveIntegerField(default=0, blank=False, null=False)
+    quiz_content = models.TextField(help_text="Concatenated string of questions, options, correct answers, and student answers")
+    ai_recommendations = models.TextField(blank=True, null=True)
+    date_taken = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = ['quiz', 'student']
+        ordering = ['-date_taken']
+
+    def __str__(self):
+        return f'{self.student.username} - {self.quiz.title} - {self.percentage}%'
+            
+results/serializers.py
+from rest_framework import serializers
+from .models import Result
+
+class ResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Result
+        fields = ['id', 'quiz', 'student', 'percentage', 'quiz_content', 
+                 'ai_recommendations', 'date_taken']
+        read_only_fields = ['ai_recommendations', 'student']
+
+    def validate_percentage(self, value):
+        if not (0 <= value <= 100):
+            raise serializers.ValidationError("Percentage must be between 0 and 100")
+        return value
+
+    def validate_quiz_content(self, value):
+        if not value:
+            raise serializers.ValidationError("Quiz content is required")
+        return value
+
+#results/urls.py
+from django.urls import path
+from .views import ResultListCreateView, ResultDetailView, QuizLeaderboardView
+
+urlpatterns = [
+    path('<int:module_pk>/quizzes/<int:quiz_pk>/', ResultListCreateView.as_view(), name='result-list-create'),
+    path('<int:module_pk>/quizzes/<int:quiz_pk>/results/<int:pk>/', ResultDetailView.as_view(), name='result-detail'),
+
+      path('<int:module_pk>/quizzes/<int:quiz_pk>/leaderboard/', QuizLeaderboardView.as_view(), name='quiz-leaderboard'),
+]
+
+#results/ai_result.py
+import g4f
+import logging
+
+logger = logging.getLogger(__name__)
+
+class AIResultManager:
+    def generate_result(self, quiz_content, percentage):
+        """
+        Generate personalized recommendations based on quiz performance.
+        
+        Args:
+            quiz_content (str): Concatenated string containing questions, options, 
+                              correct answers, and student answers
+            percentage (int): Student's score percentage
+        """
+        try:
+            prompt = f"""
+            A student has completed a quiz with the following details:
+            
+            Score: {percentage}%
+            
+            Quiz Content (Format: Questions, Options, Correct Answers, Student's Answers):
+            {quiz_content}
+            
+            Based on this information, please provide:
+            1. A detailed analysis of the student's performance
+            2. Identification of specific topics or concepts that need improvement
+            3. Personalized study recommendations including:
+               - Relevant YouTube video links for topics they struggled with
+               - Practice exercises
+               - Real-world examples to better understand the concepts
+            4. Specific strategies to improve understanding of misunderstood concepts
+            
+            Please format your response in markdown for better readability.
+            """
+            
+            response = g4f.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an experienced professor providing detailed, personalized learning recommendations."
+                    },
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            return response['choices'][0]['message']['content'] if isinstance(response, dict) else response
+            
+        except Exception as e:
+            logger.error(f"AI recommendation generation failed: {str(e)}")
+            return """
+            # Quiz Review
+            
+            Unable to generate personalized recommendations at this time. 
+            
+            Please:
+            1. Review the questions you answered incorrectly
+            2. Compare your answers with the correct answers
+            3. Take notes on topics you found challenging
+            4. Consider reviewing the course material for those topics
+            """

@@ -1,0 +1,1625 @@
+#models/quiz.dart
+class Quiz {
+  final int id;
+  final String title;
+  final String description;
+  final String content; // Quiz content field
+  final int moduleId; // Linking to the module the quiz belongs to
+  final int quizDuration; // Duration in minutes
+
+  Quiz({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.content,
+    required this.quizDuration,
+    required this.moduleId,
+  });
+
+  // Factory method to create Quiz from JSON
+  factory Quiz.fromJson(Map<String, dynamic> json) {
+    return Quiz(
+      id: json['id'] ?? 0,
+      title: json['title'] ?? 'Untitled',
+      description: json['description'] ?? 'No description provided',
+      content: json['content'] ?? 'No content provided', // Quiz content
+      quizDuration: json['quiz_duration'] ?? 0,
+      moduleId: json['module_id'] ?? 0,
+    );
+  }
+
+  // Method to convert Quiz to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'content': content, // Content now replaces questions
+      'quiz_duration': quizDuration,
+      'module_id': moduleId,
+    };
+  }
+}
+
+#quiz_detail_screen.dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:learn_smart/screens/widgets/result.dart';
+import 'package:learn_smart/screens/widgets/app_bar.dart';
+import 'package:learn_smart/services/api_service.dart';
+import 'package:learn_smart/models/quiz.dart';
+import 'package:provider/provider.dart';
+import 'package:learn_smart/view_models/auth_view_model.dart';
+
+class QuizDetailScreen extends StatefulWidget {
+  final int moduleId;
+  final int quizId;
+  final bool isStudentEnrolled;
+  final bool isEditMode;
+
+  QuizDetailScreen({
+    required this.moduleId,
+    required this.quizId,
+    required this.isStudentEnrolled,
+    this.isEditMode = false,
+  });
+
+  @override
+  _QuizDetailScreenState createState() => _QuizDetailScreenState();
+}
+
+class _QuizDetailScreenState extends State<QuizDetailScreen> {
+  late Future<Quiz> quizFuture;
+  late ApiService _apiService;
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _contentController = TextEditingController();
+  bool _isLoading = true;
+  List<Map<String, dynamic>> parsedQuestions = [];
+
+  int currentQuestionIndex = 0;
+  String selectedAnswer = '';
+  Map<int, String> selectedAnswers = {};
+  bool showResult = false;
+  bool showReview = false;
+
+  double progress = 0.0;
+  int correctAnswersCount = 0;
+  Timer? _timer;
+  int timeLeft = 30; // 30 seconds per question
+  var isStudent;
+  bool hasQuizStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+    _apiService = ApiService(baseUrl: 'http://10.0.2.2:8000/api/');
+    _apiService.updateToken(authViewModel.user.token ?? '');
+    quizFuture = _apiService.getQuizDetail(widget.moduleId, widget.quizId);
+    isStudent = authViewModel.user.isStudent();
+
+    if (hasQuizStarted && isStudent) _startTimer();
+  }
+
+  void _startTimer() {
+    timeLeft = 30;
+    _timer?.cancel();
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        if (timeLeft > 0) {
+          timeLeft--;
+          progress = 1 - (timeLeft / 30);
+        } else {
+          timer.cancel();
+          _goToNextQuestion();
+        }
+      });
+    });
+  }
+
+  void _parseQuizContent(String content) {
+    List<String> questionBlocks = content.split("\n\n");
+    parsedQuestions.clear(); // Clear existing questions
+
+    for (var block in questionBlocks) {
+      List<String> lines = block.split("\n");
+      if (lines.length >= 6) {
+        String questionText = lines[0];
+        List<String> options = [
+          lines[1].trim(),
+          lines[2].trim(),
+          lines[3].trim(),
+          lines[4].trim(),
+        ];
+        String correctAnswer = _extractCorrectAnswer(block);
+
+        parsedQuestions.add({
+          'question': questionText,
+          'options': options,
+          'correctAnswer': correctAnswer,
+        });
+      }
+    }
+  }
+
+  String _extractCorrectAnswer(String questionBlock) {
+    final correctAnswerPattern = RegExp(r'Correct Answer:\s?([A-D])');
+    final match = correctAnswerPattern.firstMatch(questionBlock);
+    return match?.group(1) ?? '';
+  }
+
+  void _goToNextQuestion() {
+    if (currentQuestionIndex < parsedQuestions.length - 1) {
+      setState(() {
+        currentQuestionIndex++;
+        selectedAnswer = selectedAnswers[currentQuestionIndex] ?? '';
+        timeLeft = 30; // Reset timer for new question
+      });
+    } else {
+      _submitQuiz();
+    }
+  }
+
+  void _calculateResult() {
+    correctAnswersCount = 0;
+    for (int i = 0; i < parsedQuestions.length; i++) {
+      String correctAnswer = parsedQuestions[i]['correctAnswer'];
+      String? selectedAnswer = selectedAnswers[i];
+
+      if (selectedAnswer != null &&
+          correctAnswer == selectedAnswer.substring(0, 1)) {
+        correctAnswersCount++;
+      }
+    }
+  }
+
+  String _generateSubmissionContent() {
+    StringBuffer submissionContent = StringBuffer();
+
+    for (int i = 0; i < parsedQuestions.length; i++) {
+      // Add question
+      submissionContent.writeln(parsedQuestions[i]['question']);
+
+      // Add all options
+      List<String> options = parsedQuestions[i]['options'];
+      for (String option in options) {
+        submissionContent.writeln(option);
+      }
+
+      // Add correct answer
+      submissionContent
+          .writeln('Correct Answer: ${parsedQuestions[i]['correctAnswer']}');
+
+      // Add student's selected answer
+      String? studentAnswer = selectedAnswers[i];
+      submissionContent
+          .writeln('Student Answer: ${studentAnswer ?? 'Not answered'}');
+
+      // Add blank line between questions
+      submissionContent.writeln();
+    }
+
+    return submissionContent.toString().trim();
+  }
+
+  void _submitQuiz() async {
+    // Calculate the quiz result
+    _calculateResult();
+
+    // Cancel the timer and show the result
+    setState(() {
+      showResult = true;
+      _timer?.cancel();
+    });
+
+    // Prepare quiz result data
+    int totalQuestions = parsedQuestions.length;
+    double percentage = (correctAnswersCount / totalQuestions) * 100;
+
+    // Generate submission content with student's answers
+    String submissionContent = _generateSubmissionContent();
+
+    // Submit the result to the backend
+    try {
+      await _apiService.submitQuizResult(
+        moduleId: widget.moduleId,
+        quizId: widget.quizId,
+        percentage: percentage,
+        quizContent:
+            submissionContent, // Now contains both questions and student's answers
+      );
+      print("Quiz result submitted successfully!");
+    } catch (e) {
+      print("Failed to submit quiz result: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to submit quiz result. Please try again."),
+        ),
+      );
+    }
+  }
+
+  Widget _buildQuizContent() {
+    if (parsedQuestions.isEmpty) {
+      return Center(child: Text('No quiz content available.'));
+    }
+
+    if (!hasQuizStarted && isStudent) {
+      return Center(
+        child: ElevatedButton(
+          onPressed: () {
+            setState(() {
+              hasQuizStarted = true;
+              _startTimer();
+            });
+          },
+          child: Text('Attempt Quiz'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Progress indicator and question counter
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${currentQuestionIndex + 1}/${parsedQuestions.length}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600],
+                ),
+              ),
+              Container(
+                width: 45,
+                height: 45,
+                child: Stack(
+                  children: [
+                    CircularProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF4CAF50),
+                      ),
+                      strokeWidth: 4,
+                    ),
+                    Center(
+                      child: Text(
+                        '$timeLeft',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Question
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
+          child: Text(
+            parsedQuestions[currentQuestionIndex]['question'],
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+
+        // Options
+        ...parsedQuestions[currentQuestionIndex]['options']
+            .map<Widget>((option) {
+          bool isSelected = selectedAnswer == option;
+          return Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  selectedAnswer = option;
+                  selectedAnswers[currentQuestionIndex] = option;
+                });
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected ? Color(0xFFE3F2FD) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected ? Color(0xFF2196F3) : Colors.grey[300]!,
+                    width: 2,
+                  ),
+                ),
+                padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? Color(0xFF2196F3)
+                              : Colors.grey[400]!,
+                          width: 2,
+                        ),
+                        color: isSelected ? Color(0xFF2196F3) : Colors.white,
+                      ),
+                      child: isSelected
+                          ? Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        option,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color:
+                              isSelected ? Color(0xFF2196F3) : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+
+        // Next/Submit button
+        Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: selectedAnswer.isEmpty ? null : _goToNextQuestion,
+              child: Text(
+                currentQuestionIndex < parsedQuestions.length - 1
+                    ? 'Next'
+                    : 'Submit',
+                style: TextStyle(fontSize: 16),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReviewContent() {
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      itemCount: parsedQuestions.length,
+      itemBuilder: (context, index) {
+        final question = parsedQuestions[index];
+        final selectedAnswer = selectedAnswers[index] ?? '';
+        final correctAnswer = question['correctAnswer'];
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Question ${index + 1}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  question['question'],
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 16),
+                ...question['options'].map<Widget>((option) {
+                  bool isSelected = selectedAnswer == option;
+                  bool isCorrect = option.startsWith(correctAnswer);
+
+                  Color getBackgroundColor() {
+                    if (isSelected && isCorrect) return Color(0xFFE8F5E9);
+                    if (isSelected && !isCorrect) return Color(0xFFFFEBEE);
+                    if (isCorrect) return Color(0xFFE8F5E9);
+                    return Colors.white;
+                  }
+
+                  Color getBorderColor() {
+                    if (isSelected && isCorrect) return Color(0xFF4CAF50);
+                    if (isSelected && !isCorrect) return Color(0xFFEF5350);
+                    if (isCorrect) return Color(0xFF4CAF50);
+                    return Colors.grey[300]!;
+                  }
+
+                  return Container(
+                    margin: EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: getBackgroundColor(),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: getBorderColor(),
+                        width: 2,
+                      ),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    child: Row(
+                      children: [
+                        if (isSelected && isCorrect)
+                          Icon(Icons.check_circle, color: Color(0xFF4CAF50))
+                        else if (isSelected && !isCorrect)
+                          Icon(Icons.cancel, color: Color(0xFFEF5350))
+                        else if (isCorrect)
+                          Icon(Icons.check_circle_outline,
+                              color: Color(0xFF4CAF50))
+                        else
+                          Icon(Icons.radio_button_unchecked,
+                              color: Colors.grey),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            option,
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildResultView() {
+    return ResultView(
+      totalQuestions: parsedQuestions.length,
+      correctAnswersCount: correctAnswersCount,
+      onReview: () {
+        setState(() {
+          showReview = true;
+        });
+      },
+      onReturn: () {
+        Navigator.pop(context);
+      },
+    );
+    // int totalQuestions = parsedQuestions.length;
+    // double percentage = (correctAnswersCount / totalQuestions) * 100;
+
+    // return Column(
+    //   mainAxisAlignment: MainAxisAlignment.center,
+    //   children: [
+    //     Text(
+    //       'Quiz Completed!',
+    //       style: TextStyle(
+    //         fontSize: 24,
+    //         fontWeight: FontWeight.bold,
+    //         color: Color(0xFF1A4A44),
+    //       ),
+    //     ),
+    //     SizedBox(height: 20),
+    //     Container(
+    //       padding: EdgeInsets.all(24),
+    //       decoration: BoxDecoration(
+    //         color: Color(0xFFE3F2FD),
+    //         borderRadius: BorderRadius.circular(16),
+    //       ),
+    //       child: Column(
+    //         children: [
+    //           Text(
+    //             '${percentage.round()}%',
+    //             style: TextStyle(
+    //               fontSize: 48,
+    //               fontWeight: FontWeight.bold,
+    //               color: Color(0xFF1A4A44),
+    //             ),
+    //           ),
+    //           Text(
+    //             '$correctAnswersCount out of $totalQuestions correct',
+    //             style: TextStyle(
+    //               fontSize: 18,
+    //               color: Colors.grey[600],
+    //             ),
+    //           ),
+    //         ],
+    //       ),
+    //     ),
+    //     SizedBox(height: 32),
+    //     Row(
+    //       mainAxisAlignment: MainAxisAlignment.center,
+    //       children: [
+    //         ElevatedButton(
+    //           onPressed: () {
+    //             setState(() {
+    //               showReview = true;
+    //             });
+    //           },
+    //           child: Text('Review Answers'),
+    //           style: ElevatedButton.styleFrom(
+    //             foregroundColor: Color(0xFF1A4A44),
+    //             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+    //             shape: RoundedRectangleBorder(
+    //               borderRadius: BorderRadius.circular(12),
+    //             ),
+    //           ),
+    //         ),
+    //         SizedBox(width: 16),
+    //         OutlinedButton(
+    //           onPressed: () {
+    //             Navigator.pop(context);
+    //           },
+    //           child: Text('Return'),
+    //           style: OutlinedButton.styleFrom(
+    //             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+    //             shape: RoundedRectangleBorder(
+    //               borderRadius: BorderRadius.circular(12),
+    //             ),
+    //           ),
+    //         ),
+    //       ],
+    //     ),
+    //   ],
+    // );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: CustomAppBar(title: 'Quiz'),
+      body: FutureBuilder<Quiz>(
+        future: quizFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else if (snapshot.hasData) {
+            final quiz = snapshot.data!;
+            if (parsedQuestions.isEmpty) {
+              _parseQuizContent(quiz.content);
+              if (!widget.isEditMode) _startTimer();
+            }
+
+            if (showReview) {
+              return _buildReviewContent();
+            } else if (showResult) {
+              return _buildResultView();
+            } else {
+              return isStudent && !widget.isEditMode
+                  ? _buildQuizContent()
+                  : _buildReviewContent();
+            }
+          } else {
+            return Center(child: Text('No data available'));
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+}
+
+#services/api_service.dart
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:learn_smart/models/profile.dart';
+import 'dart:convert';
+
+import '../models/course.dart';
+import '../models/datastore.dart';
+import '../models/enrollment.dart';
+import '../models/module.dart';
+import '../models/note.dart';
+import '../models/quiz.dart';
+
+class ApiService {
+  final String baseUrl;
+  String? _token;
+  String? _refreshToken;
+
+  ApiService({required this.baseUrl});
+
+  void updateToken(String token) {
+    _token = token;
+  }
+
+  // General Request Handler
+  Future<dynamic> _performHttpRequest({
+    required String url,
+    required String requestType,
+    Map<String, dynamic>? body,
+  }) async {
+    if (_token == null) {
+      throw Exception('Token is null, authentication failed.');
+    }
+
+    // await _ensureValidToken();
+    final headers = {
+      'Authorization': 'Bearer $_token',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      switch (requestType) {
+        case 'GET':
+          return await http.get(Uri.parse(url), headers: headers);
+        case 'POST':
+          return await http.post(Uri.parse(url),
+              headers: headers, body: json.encode(body));
+        case 'PUT':
+          return await http.put(Uri.parse(url),
+              headers: headers, body: json.encode(body));
+        case 'PATCH':
+          return await http.patch(Uri.parse(url),
+              headers: headers, body: json.encode(body));
+        case 'DELETE':
+          return await http.delete(Uri.parse(url), headers: headers);
+        default:
+          throw Exception('Invalid request type');
+      }
+    } catch (error) {
+      debugPrint('HTTP Request failed: $error');
+      rethrow;
+    }
+  }
+
+  // Courses CRUD
+  Future<List<Course>> fetchCourses() async {
+    List<Course> courses = [];
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'courses/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> coursesJson = json.decode(response.body);
+        courses = coursesJson.map((json) => Course.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to fetch courses');
+      }
+    } catch (e) {
+      debugPrint('Error fetching courses: $e');
+    }
+    return courses;
+  }
+
+  Future<void> getCourseDetail(int courseId) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'courses/$courseId/',
+      requestType: 'GET',
+    );
+
+    if (response.statusCode == 200) {
+      // Parse the response body and update the DataStore with the course details
+      Course course = Course.fromJson(json.decode(response.body));
+      DataStore.addCourse(course); // Store course details in DataStore
+      debugPrint('Course details fetched and stored');
+    } else {
+      throw Exception('Failed to load course details');
+    }
+  }
+
+  // Modules CRUD
+  Future<void> fetchModules(int courseId) async {
+    try {
+      final response = await _performHttpRequest(
+          url: baseUrl + 'modules/?course_id=$courseId', requestType: 'GET');
+      if (response.statusCode == 200) {
+        List<dynamic> modulesJson = json.decode(response.body);
+        List<Module> modules =
+            modulesJson.map((m) => Module.fromJson(m)).toList();
+        DataStore.setModules(courseId, modules);
+      } else {
+        throw Exception('Failed to fetch modules');
+      }
+    } catch (e) {
+      debugPrint('Error fetching modules: $e');
+    }
+  }
+
+  // Notes CRUD
+  Future<void> fetchNotes(int moduleId) async {
+    try {
+      final response = await _performHttpRequest(
+          url: baseUrl + 'modules/$moduleId/notes/', requestType: 'GET');
+      if (response.statusCode == 200) {
+        List<dynamic> notesJson = json.decode(response.body);
+        List<Note> notes = notesJson.map((n) => Note.fromJson(n)).toList();
+        DataStore.setNotes(moduleId, notes);
+      } else {
+        throw Exception('Failed to fetch notes');
+      }
+    } catch (e) {
+      debugPrint('Error fetching notes: $e');
+    }
+  }
+
+  // Quizzes CRUD
+  Future<void> fetchQuizzes(int moduleId) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'modules/$moduleId/quizzes/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> quizzesJson = json.decode(response.body);
+        List<Quiz> quizzes = quizzesJson.map((q) => Quiz.fromJson(q)).toList();
+        DataStore.setQuizzes(moduleId, quizzes);
+      } else {
+        throw Exception('Failed to fetch quizzes');
+      }
+    } catch (e) {
+      debugPrint('Error fetching quizzes: $e');
+    }
+  }
+
+  // Enrollment Methods
+  Future<void> enrollInCourse(int courseId, String courseCode) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'enrollments/create/',
+        requestType: 'POST',
+        body: {
+          'course_id': courseId, // Ensure course_id is passed
+          'course_code': courseCode, // Ensure course_code is passed
+        },
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('Successfully enrolled in the course.');
+      } else if (response.statusCode == 400) {
+        final responseBody = jsonDecode(response.body);
+        if (responseBody['detail'] != null) {
+          throw Exception(responseBody['detail']);
+        } else {
+          throw Exception(
+              'Failed to enroll in the course. Please check the course code or ID.');
+        }
+      } else {
+        throw Exception('Unexpected error. Please try again.');
+      }
+    } catch (e) {
+      debugPrint('Error enrolling in course: $e');
+    }
+  }
+
+  Future<List<EnrollmentRequest>> fetchTeacherEnrollmentRequests() async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'enrollments/teacher-requests/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> jsonResponse = json.decode(response.body);
+        return jsonResponse
+            .map((json) => EnrollmentRequest.fromJson(json))
+            .toList();
+      } else {
+        throw Exception('Failed to load enrollment requests');
+      }
+    } catch (e) {
+      debugPrint('Error fetching enrollment requests: $e');
+      return [];
+    }
+  }
+
+  Future<List<StudentEnrollmentRequest>>
+      fetchStudentEnrollmentRequests() async {
+    final response = await http.get(
+      Uri.parse(baseUrl + 'enrollments/student-requests/'),
+      headers: {
+        'Authorization': 'Bearer $_token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data
+          .map((json) => StudentEnrollmentRequest.fromJson(json))
+          .toList();
+    } else {
+      throw Exception('Failed to load student enrollment requests');
+    }
+  }
+
+  // Fetch upcoming notes for enrolled courses
+  Future<List<dynamic>> fetchUpcomingNotes() async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + ' notes/upcoming/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to fetch upcoming notes');
+      }
+    } catch (e) {
+      debugPrint('Error fetching upcoming notes: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteModule(int moduleId, int courseId) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/',
+      requestType: 'DELETE',
+    );
+
+    if (response.statusCode == 204) {
+      DataStore.removeModule(courseId, moduleId);
+      debugPrint('Module deleted successfully');
+    } else {
+      throw Exception('Failed to delete module');
+    }
+  }
+
+  Future<void> createModule(
+      int courseId, String title, String description) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/',
+      requestType: 'POST',
+      body: {
+        'course': courseId,
+        'title': title,
+        'description': description,
+      },
+    );
+
+    if (response.statusCode == 201) {
+      await fetchModules(courseId); // Refresh modules after creation
+      debugPrint('Module created successfully');
+    } else {
+      throw Exception('Failed to create module');
+    }
+  }
+
+  Future<bool> updateModule(
+      int moduleId, int courseId, String title, String description) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/',
+      requestType: 'PATCH',
+      body: {
+        'title': title,
+        'description': description,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      await fetchModules(courseId); // Refresh modules after update
+      debugPrint('Module updated successfully');
+      return true; // Return true to indicate success
+    } else {
+      debugPrint('Failed to update module');
+      return false; // Return false on failure
+    }
+  }
+
+  Future<void> createCourse(String name, String description) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'courses/',
+      requestType: 'POST',
+      body: {
+        'name': name,
+        'description': description,
+      },
+    );
+
+    if (response.statusCode == 201) {
+      await fetchCourses(); // Refresh courses after creation
+      debugPrint('Course created successfully');
+    } else {
+      throw Exception('Failed to create course');
+    }
+  }
+
+  Future<void> createNote(
+    int moduleId,
+    String title,
+    String content,
+  ) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/notes/',
+      requestType: 'POST',
+      body: {'title': title, 'content': content},
+    );
+
+    if (response.statusCode == 201) {
+      await fetchNotes(moduleId); // Refresh notes after creation
+    } else {
+      throw Exception('Failed to create note');
+    }
+  }
+
+  Future<void> createQuiz(
+    int moduleId,
+    String title,
+    String description,
+    String content,
+    String quiz_duration,
+  ) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/quizzes/',
+      requestType: 'POST',
+      body: {
+        'title': title,
+        'description': description,
+        'content': content,
+        'quiz_duration': quiz_duration,
+        'module': moduleId
+      },
+    );
+
+    if (response.statusCode != 201) {
+      debugPrint('Failed to create quiz: ${response.body}');
+      throw Exception('Failed to create quiz: ${response.body}');
+    }
+    if (response.statusCode == 201) {
+      await fetchQuizzes(moduleId); // Refresh quizzes after creation
+    } else {
+      throw Exception('Failed to create quiz');
+    }
+  }
+
+  // Fetch quiz results
+  Future<List<dynamic>> fetchQuizResults(int quizId) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'quizzes/$quizId/results/',
+      requestType: 'GET',
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to fetch quiz results');
+    }
+  }
+
+  Future<Profile> fetchUserProfile() async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'users/profile/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        print('User profile JSON response: $jsonResponse');
+
+        final profile = Profile.fromJson(jsonResponse);
+        print(
+            'Parsed Profile: ${profile.username}, Role: ${profile.role}, token: ${profile.token}');
+        return profile;
+      } else {
+        print('Error fetching profile: ${response.statusCode}');
+        throw Exception('Failed to load profile');
+      }
+    } catch (e) {
+      print('Error in fetchUserProfile: $e');
+      throw Exception('Failed to fetch user profile');
+    }
+  }
+
+  Future<Map<String, dynamic>> generateAINoteForModule(
+      int moduleId, String topic) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/generate-notes/',
+      requestType: 'POST',
+      body: {'topic': topic},
+    );
+
+    if (response.statusCode == 201) {
+      debugPrint('AI-generated note created successfully');
+      return json.decode(
+          response.body); // Assuming the API returns the generated content
+    } else {
+      throw Exception('Failed to create AI-generated note');
+    }
+  }
+
+  // Delete Note API Method
+  Future<void> deleteNote({required int noteId, required int moduleId}) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl +
+            'modules/$moduleId/notes/$noteId/', // Assuming your API endpoint is /notes/<note_id>/
+        requestType: 'DELETE',
+      );
+
+      if (response.statusCode == 204) {
+        debugPrint('Note deleted successfully');
+        await fetchNotes(moduleId);
+      } else {
+        throw Exception('Failed to delete the note');
+      }
+    } catch (e) {
+      debugPrint('Error deleting note: $e');
+      throw Exception('Error deleting note');
+    }
+  }
+
+  Future<void> updateNote({
+    required int moduleId,
+    required int noteId,
+    required String title,
+    required String content,
+  }) async {
+    debugPrint('Updating note with data: title=$title, content=$content');
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/notes/$noteId/',
+      requestType: 'PUT',
+      body: {
+        'title': title,
+        'content': content,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      debugPrint('Note updated successfully');
+    } else {
+      throw Exception('Failed to update note');
+    }
+  }
+
+  Future<void> generateQuizFromNotes(
+      {required int moduleId,
+      required String quizTitle,
+      required int noteId}) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/notes/$noteId/generate-quiz/',
+      requestType: 'POST',
+      body: ({
+        'quiz_title': quizTitle,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      debugPrint('AI-generated quiz created successfully');
+    } else {
+      throw Exception('Failed to generate AI quiz from notes');
+    }
+  }
+
+  Future<void> generateQuizForMultipleNotes(
+    int moduleId,
+    List<int> noteIds,
+  ) async {
+    debugPrint('Generating quiz for notes: $noteIds in module: $moduleId');
+
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/notes/generate-quiz/',
+      requestType: 'POST',
+      body: {
+        'note_ids': noteIds,
+      },
+    );
+
+    if (response.statusCode == 201) {
+      debugPrint('Quiz generated successfully');
+      await fetchQuizzes(moduleId); // Refresh quizzes list
+    } else {
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to generate quiz');
+    }
+  }
+
+  Future<void> deleteQuiz({
+    required int moduleId,
+    // required int noteId,
+    required int quizId,
+  }) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'modules/$moduleId/quizzes/$quizId/',
+        requestType: 'DELETE',
+      );
+
+      if (response.statusCode == 204) {
+        debugPrint('Quiz deleted successfully');
+      } else {
+        throw Exception('Failed to delete the quiz');
+      }
+    } catch (e) {
+      debugPrint('Error deleting quiz: $e');
+      throw Exception('Error deleting quiz');
+    }
+  }
+
+  Future<void> updateQuiz({
+    required int moduleId,
+    required int quizId,
+    required String title,
+    required String description,
+    required String content,
+  }) async {
+    final response = await _performHttpRequest(
+      url: baseUrl + 'modules/$moduleId/quizzes/$quizId/',
+      requestType: 'PUT',
+      body: {
+        'title': title,
+        'content': content,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      debugPrint('Quiz updated successfully');
+    } else {
+      throw Exception('Failed to update quiz');
+    }
+  }
+
+  Future<Quiz> getQuizDetail(int moduleId, int quizId) async {
+    final url = baseUrl +
+        'modules/$moduleId/quizzes/$quizId/'; // Ensure this only has one slash
+
+    final response = await http.get(Uri.parse(url), headers: {
+      'Authorization': 'Bearer $_token', // Assuming you're using a Bearer token
+      'Content-Type': 'application/json',
+    });
+
+    if (response.statusCode == 200) {
+      final quizJson = json.decode(response.body);
+      return Quiz.fromJson(quizJson);
+    } else {
+      throw Exception('Failed to load quiz details');
+    }
+  }
+
+  Future<void> submitQuizResult({
+    required int moduleId,
+    required int quizId,
+    required double percentage,
+    required String quizContent,
+  }) async {
+    final url = baseUrl + 'results/$moduleId/quizzes/$quizId/';
+
+    try {
+      final response = await _performHttpRequest(
+        url: url,
+        requestType: 'POST',
+        body: {
+          "quiz": quizId,
+          'percentage': percentage,
+          'quiz_content': quizContent,
+        },
+      );
+
+      if (response.statusCode != 201) {
+        final errorData = json.decode(response.body);
+        if (errorData['code'] == 'duplicate_submission') {
+          throw Exception('You have already submitted this quiz.');
+        }
+        throw Exception('Failed to submit quiz result: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error submitting quiz result: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getQuizResult(int quizId) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'quizzes/$quizId/result/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to fetch quiz result');
+      }
+    } catch (e) {
+      debugPrint('Error fetching quiz result: $e');
+      throw Exception('Error fetching quiz result');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getQuizLeaderboard(int quizId) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'quizzes/$quizId/leaderboard/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data);
+      } else {
+        throw Exception('Failed to fetch quiz leaderboard');
+      }
+    } catch (e) {
+      debugPrint('Error fetching quiz leaderboard: $e');
+      throw Exception('Error fetching quiz leaderboard');
+    }
+  }
+
+  Future<Map<String, dynamic>> getStudentQuizResults(int moduleId) async {
+    try {
+      final response = await _performHttpRequest(
+        url: baseUrl + 'modules/$moduleId/results/',
+        requestType: 'GET',
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to fetch student quiz results');
+      }
+    } catch (e) {
+      debugPrint('Error fetching student quiz results: $e');
+      throw Exception('Error fetching student quiz results');
+    }
+  }
+}
+
+#module_detail_screen.dart
+import 'package:flutter/material.dart';
+import 'package:learn_smart/services/api_service.dart';
+import 'package:learn_smart/models/datastore.dart';
+import 'package:learn_smart/models/note.dart' as modelsNote;
+import 'package:learn_smart/view_models/auth_view_model.dart';
+import 'package:provider/provider.dart';
+import 'notes_detail_screen.dart';
+import 'widgets/custom_button.dart';
+import 'widgets/custom_form_field.dart';
+import '../controllers/notes_controller.dart';
+import '../controllers/quiz_controller.dart';
+import './widgets/notes_section.dart';
+import './widgets/quiz_section.dart';
+import './widgets/results_section.dart';
+
+class ModuleDetailScreen extends StatefulWidget {
+  final int moduleId;
+
+  const ModuleDetailScreen({
+    Key? key,
+    required this.moduleId,
+  }) : super(key: key);
+
+  @override
+  _ModuleDetailScreenState createState() => _ModuleDetailScreenState();
+}
+
+class _ModuleDetailScreenState extends State<ModuleDetailScreen>
+    with SingleTickerProviderStateMixin {
+  String moduleTitle = "Loading...";
+  String moduleDescription = "Loading description...";
+  late TabController _tabController;
+  late ApiService _apiService;
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+  bool _isSelectionMode = false;
+  List<int> _selectedNoteIds = [];
+  late NotesController _notesController;
+  late QuizController _quizController;
+  bool _isTeacher = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+      _apiService = ApiService(baseUrl: 'http://10.0.2.2:8000/api/');
+      _apiService.updateToken(authViewModel.user.token ?? '');
+      setState(() {
+        _isTeacher = authViewModel.user.role == 'teacher';
+      });
+
+      _notesController = NotesController(
+        apiService: _apiService,
+        moduleId: widget.moduleId,
+      );
+
+      _quizController = QuizController(
+        context,
+        _apiService,
+        widget.moduleId,
+      );
+
+      await _loadModuleDetails();
+    });
+  }
+
+  Future<void> _loadModuleDetails() async {
+    try {
+      final module = DataStore.getModuleById(widget.moduleId);
+
+      setState(() {
+        moduleTitle = module?.title ?? "Unknown Module Title";
+        moduleDescription = module?.description ?? "No description available";
+        _isLoading = false;
+      });
+
+      await _apiService.fetchNotes(widget.moduleId);
+      await _apiService.fetchQuizzes(widget.moduleId);
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  void _toggleNoteSelection(int noteId) {
+    setState(() {
+      if (_selectedNoteIds.contains(noteId)) {
+        _selectedNoteIds.remove(noteId);
+      } else {
+        _selectedNoteIds.add(noteId);
+      }
+    });
+  }
+
+  Future<void> _generateQuiz() async {
+    if (_selectedNoteIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one note.")),
+      );
+      return;
+    }
+
+    try {
+      await _apiService.generateQuizForMultipleNotes(
+          widget.moduleId, _selectedNoteIds);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Quiz generated successfully!")),
+      );
+      setState(() {
+        _selectedNoteIds.clear();
+        _isSelectionMode = false;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error generating quiz: $e")),
+      );
+    }
+  }
+
+  Widget _buildTabs() {
+    return Expanded(
+      child: TabBarView(
+        controller: _tabController,
+        children: [
+          NotesSection(
+            notes: DataStore.getNotes(widget.moduleId),
+            controller: _notesController,
+            isTeacher: _isTeacher,
+            isSelectionMode: _isSelectionMode,
+            selectedNoteIds: _selectedNoteIds,
+            onNoteSelected: _toggleNoteSelection,
+            onNoteTap: (note) => _navigateToNoteDetail(note),
+          ),
+          QuizSection(
+            quizzes: DataStore.getQuizzes(widget.moduleId),
+            controller: _quizController,
+            isTeacher: _isTeacher,
+          ),
+          ResultsSection(
+            quizzes: DataStore.getQuizzes(widget.moduleId),
+            controller: _quizController,
+            isTeacher: _isTeacher,
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _hasError
+              ? Center(child: Text(_errorMessage))
+              : Column(
+                  children: [
+                    _buildModuleHeader(),
+                    _buildTabs(),
+                  ],
+                ),
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: Colors.blue,
+      foregroundColor: Colors.white,
+      toolbarHeight: 80,
+      title: Text(
+        moduleTitle,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(30),
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildFloatingActionButton() {
+    if (_tabController.index != 0 || !_isTeacher) {
+      return null;
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        FloatingActionButton(
+          onPressed: () => _showCreateNoteDialog(context),
+          backgroundColor: Colors.blue,
+          child: const Icon(Icons.add, color: Colors.white),
+          heroTag: "createNote",
+        ),
+        const SizedBox(height: 16),
+        FloatingActionButton(
+          onPressed: _generateQuiz,
+          backgroundColor: Colors.blue,
+          child: const Icon(Icons.question_answer),
+          heroTag: "generateQuiz",
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showCreateNoteDialog(BuildContext context) async {
+    final formKey = GlobalKey<FormState>();
+    String? title;
+    String? content;
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Create Note'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CustomFormField(
+                  label: 'Title',
+                  onSaved: (value) => title = value,
+                ),
+                const SizedBox(height: 16),
+                CustomFormField(
+                  label: 'Content',
+                  onSaved: (value) => content = value,
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CustomButton(
+              text: 'Cancel',
+              backgroundColor: Colors.grey,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            CustomButton(
+              text: 'Create',
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  formKey.currentState!.save();
+                  await _apiService.createNote(
+                    widget.moduleId,
+                    title ?? 'Untitled',
+                    content ?? 'No content',
+                  );
+                  Navigator.of(context).pop();
+                  await _apiService.fetchNotes(widget.moduleId);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _navigateToNoteDetail(modelsNote.Note note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NotesDetailScreen(
+          noteId: note.id,
+          moduleId: widget.moduleId,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModuleHeader() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            moduleDescription,
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TabBar(
+            controller: _tabController,
+            labelColor: Colors.blue,
+            unselectedLabelColor: Colors.grey,
+            tabs: const [
+              Tab(text: 'Notes'),
+              Tab(text: 'Quizzes'),
+              Tab(text: 'Results'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
