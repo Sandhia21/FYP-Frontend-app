@@ -147,8 +147,8 @@ class CustomButton extends StatelessWidget {
           valueColor: AlwaysStoppedAnimation<Color>(
             _isDisabled
                 ? AppColors.grey
-                : variant == ButtonVariant.outlined
-                    ? AppColors.primary
+                : variant == ButtonVariant.outlined || isOutlined
+                    ? textColor ?? AppColors.primary
                     : AppColors.white,
           ),
         ),
@@ -165,8 +165,8 @@ class CustomButton extends StatelessWidget {
             size: 24.0,
             color: _isDisabled
                 ? AppColors.grey
-                : variant == ButtonVariant.outlined
-                    ? AppColors.primary
+                : variant == ButtonVariant.outlined || isOutlined
+                    ? textColor ?? AppColors.primary
                     : AppColors.white,
           ),
           const SizedBox(width: 8.0),
@@ -176,8 +176,8 @@ class CustomButton extends StatelessWidget {
           style: TextStyle(
             color: _isDisabled
                 ? AppColors.grey
-                : variant == ButtonVariant.outlined
-                    ? AppColors.primary
+                : variant == ButtonVariant.outlined || isOutlined
+                    ? textColor ?? AppColors.primary
                     : AppColors.white,
             fontSize: 16.0,
             fontWeight: FontWeight.w500,
