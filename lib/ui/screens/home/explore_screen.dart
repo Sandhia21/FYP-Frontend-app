@@ -46,6 +46,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       appBar: const CustomAppBar(
         title: 'Explore Courses',
         showBackButton: true,
+        hideProfileIcon: true,
+        centerTitle: true,
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: Consumer<CourseProvider>(

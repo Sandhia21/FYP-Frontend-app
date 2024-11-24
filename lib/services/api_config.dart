@@ -3,9 +3,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiConfig {
   //if running one emulator use the url below
-  static const String baseUrl = 'http://192.168.100.6:8000/api';
+  static const String baseUrl = 'http://10.0.2.2:8000/api';
 
-  // static const String baseUrl = 'http://192.168.100.6:8000/api';
+  // static const String baseUrl = 'http://10.0.2.2:8000/api';
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static const String _tokenKey = 'auth_token';
 

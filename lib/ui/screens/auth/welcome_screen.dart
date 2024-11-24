@@ -1,150 +1,149 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_onboarding_slider/flutter_onboarding_slider.dart';
 import 'package:app/ui/screens/auth/login_screen.dart';
-import 'package:app/ui/screens/auth/registration_screen.dart';
 import 'package:app/constants/constants.dart';
-import 'package:introduction_screen/introduction_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  List<PageViewModel> getPages() {
-    return [
-      PageViewModel(
-        title: "Welcome to VirtuLearn",
-        body: "Your personalized learning journey starts here",
-        image: Image.asset("assets/screens/onboarding1.png"),
-        decoration: const PageDecoration(
-          titleTextStyle: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      PageViewModel(
-        title: "Interactive Learning",
-        body: "Engage with AI-powered quizzes and personalized content",
-        image: Image.asset("assets/screens/onboarding2.png"),
-        decoration: const PageDecoration(
-          titleTextStyle: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      PageViewModel(
-        title: "Track Your Progress",
-        body: "Monitor your learning journey with detailed analytics",
-        image: Image.asset("assets/screens/onboarding3.png"),
-        decoration: const PageDecoration(
-          titleTextStyle: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    ];
-  }
-
-  Widget _buildAuthButtons(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Dimensions.lg),
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(60),
-          topRight: Radius.circular(60),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            height: Dimensions.buttonHeight,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(Dimensions.borderRadiusLg),
-                ),
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              ),
-              child: Text(
-                "Login",
-                style: TextStyles.buttonText.copyWith(color: AppColors.white),
-              ),
-            ),
-          ),
-          const SizedBox(height: Dimensions.md),
-          SizedBox(
-            width: double.infinity,
-            height: Dimensions.buttonHeight,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(Dimensions.borderRadiusLg),
-                ),
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const RegistrationScreen()),
-              ),
-              child: Text(
-                "Sign Up",
-                style: TextStyles.buttonText.copyWith(color: AppColors.primary),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IntroductionScreen(
-        pages: getPages(),
-        showSkipButton: true,
-        skip: const Text("Skip"),
-        next: const Text("Next"),
-        done: const Text("Done"),
-        onDone: () {
-          // Show auth buttons when onboarding is complete
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (context) => _buildAuthButtons(context),
-          );
-        },
-        onSkip: () {
-          // Show auth buttons when user skips
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (context) => _buildAuthButtons(context),
-          );
-        },
-        dotsDecorator: DotsDecorator(
-          size: const Size.square(10.0),
-          activeSize: const Size(20.0, 10.0),
-          activeColor: AppColors.primary,
-          color: Colors.black26,
-          spacing: const EdgeInsets.symmetric(horizontal: 3.0),
-          activeShape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25.0),
-          ),
+    return OnBoardingSlider(
+      finishButtonText: 'Get Started',
+      onFinish: () {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      },
+      finishButtonStyle: FinishButtonStyle(
+        backgroundColor: AppColors.primary,
+      ),
+      skipTextButton: Text(
+        'Skip',
+        style: TextStyle(
+          fontSize: 16,
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
         ),
       ),
+      trailingFunction: () {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      },
+      controllerColor: AppColors.primary,
+      totalPage: 3,
+      headerBackgroundColor: Colors.white,
+      pageBackgroundColor: Colors.white,
+      background: [
+        Image.asset(
+          'assets/screens/onboarding1.jpg',
+          height: 450,
+          fit: BoxFit.cover,
+        ),
+        Image.asset(
+          'assets/screens/onboarding2.jpg',
+          height: 450,
+          fit: BoxFit.cover,
+        ),
+        Image.asset(
+          'assets/screens/onboarding3.jpg',
+          height: 450,
+          fit: BoxFit.cover,
+        ),
+      ],
+      speed: 1.8,
+      pageBodies: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              const SizedBox(height: 480),
+              Text(
+                'Welcome to VirtuLearn',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 24.0,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Your personalized learning journey starts here',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              const SizedBox(height: 480),
+              Text(
+                'Interactive Learning',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 24.0,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Engage with AI-powered quizzes and personalized content',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              const SizedBox(height: 480),
+              Text(
+                'Track Your Progress',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 24.0,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Monitor your learning journey with detailed analytics',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

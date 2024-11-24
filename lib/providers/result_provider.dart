@@ -33,7 +33,7 @@ class ResultProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> submitResult({
+  Future<int> submitResult({
     required int moduleId,
     required int quizId,
     required double percentage,
@@ -51,6 +51,7 @@ class ResultProvider extends ChangeNotifier {
       );
       _results = [result, ..._results];
       _error = null;
+      return result.id;
     } catch (e) {
       _error = e.toString();
       throw e;

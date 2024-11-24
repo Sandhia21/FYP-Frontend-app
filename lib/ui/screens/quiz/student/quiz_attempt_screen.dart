@@ -178,6 +178,12 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
       final questions = quiz.parsedQuestions;
       final questionResults = <Map<String, dynamic>>[];
 
+      print('=== Quiz Submission Debug Info ===');
+      print('Quiz ID: ${widget.quizId}');
+      print('Module ID: ${widget.moduleId}');
+      print('Total Questions: ${questions.length}');
+      print('User Answers: $userAnswers');
+
       for (int i = 0; i < questions.length; i++) {
         final isCorrect = i < userAnswers.length &&
             userAnswers[i] != -1 &&
@@ -194,9 +200,20 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
           'correct_answer':
               questions[i].options[questions[i].correctOptionIndex],
         });
+
+        print('\nQuestion ${i + 1}:');
+        print('Question Text: ${questions[i].question}');
+        print(
+            'User Answer: ${userAnswers[i] != -1 ? questions[i].options[userAnswers[i]] : "Not answered"}');
+        print(
+            'Correct Answer: ${questions[i].options[questions[i].correctOptionIndex]}');
+        print('Is Correct: $isCorrect');
       }
 
       final score = (correctAnswers / questions.length) * 100;
+      print('\nFinal Results:');
+      print('Correct Answers: $correctAnswers');
+      print('Total Score: $score%');
 
       // Generate AI recommendations
       String aiRecommendations;
@@ -210,9 +227,9 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
         aiRecommendations = 'Unable to generate recommendations at this time.';
       }
 
-      // Submit result to server
+      // Submit result to server and get the resultId
       final resultProvider = navigatorContext.read<ResultProvider>();
-      await resultProvider.submitResult(
+      final resultId = await resultProvider.submitResult(
         moduleId: widget.moduleId,
         quizId: widget.quizId,
         percentage: score,
@@ -222,17 +239,31 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
 
       if (!mounted) return;
 
+      print('\nNavigating to Results Screen with:');
+      print('Score: $score');
+      print('Correct Count: $correctAnswers');
+      print('Total Questions: ${questions.length}');
+      print('Result ID: $resultId');
+      print('=== End Debug Info ===');
+
+      print('\nDebug: Navigation Arguments');
+      print('moduleId: ${widget.moduleId}');
+      print('quizId: ${widget.quizId}');
+      print('resultId: $resultId');
+      print('isTeacher: false');
+
+      if (resultId <= 0) {
+        throw Exception('Failed to get result ID from server');
+      }
+
       Navigator.pushReplacementNamed(
         navigatorContext,
         app_routes.AppRoutes.quizResult,
         arguments: {
           'moduleId': widget.moduleId,
           'quizId': widget.quizId,
-          'score': score,
-          'userAnswers': userAnswers,
-          'questions': questions,
-          'correctCount': correctAnswers,
-          'totalQuestions': questions.length,
+          'resultId': resultId,
+          'isTeacher': false,
         },
       );
     } catch (e) {
@@ -367,9 +398,19 @@ class _QuizAttemptScreenState extends State<QuizAttemptScreen> {
             Padding(
               padding: const EdgeInsets.only(right: Dimensions.md),
               child: Center(
-                child: Text(
-                  'Time: ${(_timeRemaining ~/ 60).toString().padLeft(2, '0')}:${(_timeRemaining % 60).toString().padLeft(2, '0')}',
-                  style: TextStyles.bodyLarge,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Dimensions.md,
+                    vertical: Dimensions.sm - 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(Dimensions.sm),
+                  ),
+                  child: Text(
+                    '${(_timeRemaining ~/ 60).toString().padLeft(2, '0')}:${(_timeRemaining % 60).toString().padLeft(2, '0')}',
+                    style: TextStyles.bodyLarge,
+                  ),
                 ),
               ),
             ),

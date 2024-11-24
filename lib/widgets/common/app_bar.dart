@@ -11,6 +11,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showSearch;
   final bool hideProfileIcon;
   final bool centerTitle;
+  final bool automaticallyImplyLeading;
 
   const CustomAppBar({
     Key? key,
@@ -21,6 +22,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.showSearch = false,
     this.hideProfileIcon = false,
     this.centerTitle = false,
+    this.automaticallyImplyLeading = true,
   }) : super(key: key);
 
   bool get _isHome => !showBackButton;
@@ -29,7 +31,10 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.user;
-    final baseUrl = 'http://192.168.100.6:8000/'; // Move this to constants
+    final baseUrl = 'http://10.0.2.2:8000/';
+
+    final ModalRoute<dynamic>? parentRoute = ModalRoute.of(context);
+    final bool canPop = parentRoute?.canPop ?? false;
 
     return Container(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
@@ -59,7 +64,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (showBackButton)
+                if (automaticallyImplyLeading && canPop && showBackButton)
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
                     color: AppColors.white,
@@ -89,12 +94,18 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(
-                      left: showBackButton ? 0 : 16,
+                      left: (automaticallyImplyLeading &&
+                              canPop &&
+                              showBackButton)
+                          ? 0
+                          : 16,
                     ),
                     child: Column(
                       crossAxisAlignment: centerTitle
                           ? CrossAxisAlignment.center
-                          : showBackButton
+                          : (automaticallyImplyLeading &&
+                                  canPop &&
+                                  showBackButton)
                               ? CrossAxisAlignment.center
                               : CrossAxisAlignment.start,
                       children: [

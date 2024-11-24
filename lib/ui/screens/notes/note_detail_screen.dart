@@ -303,36 +303,38 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                   ],
                 ),
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: CustomButton(
-                          text: 'Edit Note',
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (context) => NoteCrudDialog(
-                              moduleId: widget.moduleId,
-                              note: note,
+                child: widget.isTeacher
+                    ? SafeArea(
+                        top: false,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton(
+                                text: 'Edit Note',
+                                onPressed: () => showDialog(
+                                  context: context,
+                                  builder: (context) => NoteCrudDialog(
+                                    moduleId: widget.moduleId,
+                                    note: note,
+                                  ),
+                                ),
+                                backgroundColor: AppColors.secondary,
+                                icon: Icons.edit,
+                              ),
                             ),
-                          ),
-                          backgroundColor: AppColors.secondary,
-                          icon: Icons.edit,
+                            const SizedBox(width: Dimensions.md),
+                            Expanded(
+                              child: CustomButton(
+                                text: 'Delete Note',
+                                onPressed: () => _deleteNote(context, note),
+                                backgroundColor: AppColors.error,
+                                icon: Icons.delete,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: Dimensions.md),
-                      Expanded(
-                        child: CustomButton(
-                          text: 'Delete Note',
-                          onPressed: () => _deleteNote(context, note),
-                          backgroundColor: AppColors.error,
-                          icon: Icons.delete,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                      )
+                    : null,
               ),
             ],
           ),

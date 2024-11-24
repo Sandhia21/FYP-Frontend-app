@@ -9,6 +9,7 @@ import '../../../widgets/common/custom_button.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../data/models/result.dart';
 import '../../../widgets/common/app_bar.dart';
+import '../../../constants/button_variant.dart';
 
 class QuizResultScreen extends StatefulWidget {
   final int moduleId;
@@ -86,6 +87,8 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
                   const SizedBox(height: Dimensions.md),
                   _buildRecommendations(result.aiRecommendations!),
                 ],
+                const SizedBox(height: Dimensions.lg),
+                if (!widget.isTeacher) _buildNavigationButtons(),
               ],
             ),
           );
@@ -264,5 +267,34 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  Widget _buildNavigationButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: CustomButton(
+            text: 'Try Again',
+            variant: ButtonVariant.outlined,
+            onPressed: () {
+              // Pop twice to go back to quiz screen
+              // Navigator.of(context).pop();
+              Navigator.popUntil(context, (route) => route.isFirst);
+            },
+          ),
+        ),
+        const SizedBox(width: Dimensions.md),
+        Expanded(
+          child: CustomButton(
+            text: 'Home',
+            variant: ButtonVariant.filled,
+            onPressed: () {
+              // Pop until home screen
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+          ),
+        ),
+      ],
+    );
   }
 }

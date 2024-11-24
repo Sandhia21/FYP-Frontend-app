@@ -109,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         showSearch: true,
         hideProfileIcon: true,
         onSearchChanged: _handleSearch,
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: LoadingOverlay(

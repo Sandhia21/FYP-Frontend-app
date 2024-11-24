@@ -289,13 +289,24 @@ class AppRoutes {
         );
 
       case quizResult:
-        final args = settings.arguments as Map<String, dynamic>;
+        final args = settings.arguments as Map<String, dynamic>?;
+        if (args == null ||
+            !args.containsKey('moduleId') ||
+            !args.containsKey('quizId') ||
+            !args.containsKey('resultId') ||
+            !args.containsKey('isTeacher')) {
+          return MaterialPageRoute(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('Invalid quiz result parameters')),
+            ),
+          );
+        }
         return MaterialPageRoute(
           builder: (_) => QuizResultScreen(
-            moduleId: args['moduleId'],
-            quizId: args['quizId'],
-            resultId: args['resultId'],
-            isTeacher: args['isTeacher'],
+            moduleId: args['moduleId'] as int,
+            quizId: args['quizId'] as int,
+            resultId: args['resultId'] as int,
+            isTeacher: args['isTeacher'] as bool,
           ),
         );
 
